@@ -1,0 +1,190 @@
+stim_s = h.IClamp(soma(0.5))  # at middle of soma
+stim_s.delay = 500 # ms 
+stim_s.dur = 2000 # ms
+stim_s.amp = -0.2 # (nA)
+
+# recordings
+v_soma = h.Vector()
+t_vec = h.Vector()
+v_soma.record(soma(0.5)._ref_v)  # from middle of soma
+t_vec.record(h._ref_t)
+
+# initial voltage
+h.v_init = -68.55
+# h.finitialize(-71)
+h.tstop = 3000  # ms
+h.run()
+
+# Filter data to only include time points from 100 to 3000 ms
+t_filtered = [t for t in t_vec if 100 <= t <= 3000]
+v_filtered = [v for i, v in enumerate(v_soma) if 100 <= t_vec[i] <= 3000]
+
+# plot
+plt.figure(figsize=(10, 6))
+plt.plot(t_filtered, v_filtered, 'green', linewidth=2)
+plt.xlabel('Time (ms)', fontsize=14)
+plt.ylabel('Membrane Potential (mV)', fontsize=14)
+
+# Remove top and right spines
+ax = plt.gca()
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+# Make left and bottom spines thicker
+ax.spines['left'].set_linewidth(2)
+ax.spines['bottom'].set_linewidth(2)
+
+# Make tick labels font size 14
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+
+# Optional: Set specific x-axis ticks to show key time points
+plt.xticks([ 500, 1000, 1500, 2000, 2500, 3000])
+
+plt.tight_layout()
+plt.show()
+
+# Convert to numpy arrays for easier calculation
+t_array = np.array(t_filtered)
+v_array = np.array(v_filtered)
+
+# Calculate sag ratio
+# 1. Find baseline voltage (before stimulus)
+baseline_mask = t_array < 500
+v_baseline = np.mean(v_array[baseline_mask])
+
+# 2. Find peak hyperpolarization (most negative voltage during stimulus)
+stim_mask = (t_array >= 500) & (t_array <= 2500)
+peak_idx = np.argmin(v_array[stim_mask])
+peak_time_idx = np.where(stim_mask)[0][peak_idx]
+v_peak = v_array[peak_time_idx]
+t_peak = t_array[peak_time_idx]
+
+# 3. Find steady-state voltage (last 200ms of stimulus)
+steady_mask = (t_array >= 2300) & (t_array <= 2500)
+v_steady = np.mean(v_array[steady_mask])
+
+# 4. Calculate voltage deflections
+peak_deflection = v_baseline - v_peak  # positive value for hyperpolarization
+steady_deflection = v_baseline - v_steady  # positive value for hyperpolarization
+
+# 5. Calculate sag ratio
+sag_ratio = steady_deflection / peak_deflection
+
+# 6. Calculate sag amplitude
+sag_amplitude = v_steady - v_peak
+
+print("=== SAG ANALYSIS RESULTS ===")
+print(f"Baseline voltage (V_baseline): {v_baseline:.2f} mV")
+print(f"Peak hyperpolarization (V_peak): {v_peak:.2f} mV at {t_peak:.1f} ms")
+print(f"Steady-state voltage (V_steady): {v_steady:.2f} mV")
+print(f"Peak deflection: {peak_deflection:.2f} mV")
+print(f"Steady-state deflection: {steady_deflection:.2f} mV")
+print(f"Sag amplitude: {sag_amplitude:.2f} mV")
+print(f"Sag ratio: {sag_ratio:.3f}")
+
+
+-------------------------------
+
+
+plt.figure(figsize=(8, 6))
+plt.plot(t_filtered, v_filtered, 'green', linewidth=2, label='Soma')
+plt.plot(t_filtered, v_prox_filtered, color="#C8CB1CE8", linewidth=2, label='Proximal dendrite')
+plt.plot(t_filtered, v_med_filtered, color="#2E2EE3E8", linewidth=2, label='Med dendrite')
+plt.plot(t_filtered, v_dend_filtered, color="#C216E0", linewidth=2, label='Distal dendrite')
+plt.legend(fontsize=9)
+plt.xlabel('Time (ms)', fontsize=14)
+plt.ylabel('Membrane Potential (mV)', fontsize=14)
+
+# Remove top and right spines
+ax = plt.gca()
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+# Make left and bottom spines thicker
+ax.spines['left'].set_linewidth(2)
+ax.spines['bottom'].set_linewidth(2)
+
+# Make tick labels font size 14
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+
+# Optional: Set specific x-axis ticks to show key time points
+plt.xticks([ 500, 1000, 1500, 2000, 2500, 3000])
+
+plt.tight_layout()
+plt.show()
+
+
+-------------
+
+# bar graph sag ratio
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Data
+distances = [0, 55, 155, 305]  # μm
+sag_ratios = [0.683, 0.688, 0.696, 0.744]
+labels = ['Soma', 'Proximal', 'Medial', 'Distal']
+
+# Colors matching your original plot
+colors = ['green', '#C8CB1CE8', '#2E2EE3E8', '#C216E0']
+
+# Create bar plot
+plt.figure(figsize=(8, 6))
+bars = plt.bar(distances, sag_ratios, color=colors, width=30, alpha=0.8, 
+               edgecolor='black', linewidth=1.5)
+
+# Add value labels on top of bars
+for i, (bar, ratio) in enumerate(zip(bars, sag_ratios)):
+    plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005, 
+             f'{ratio:.3f}', ha='center', va='bottom', fontsize=12, fontweight='bold')
+
+# X-axis will only show distance values (no location labels)
+
+plt.xlabel('Distance from Soma (μm)', fontsize=14)
+plt.ylabel('Sag Ratio', fontsize=14)
+# plt.title('Sag Ratio vs Distance from Soma', fontsize=16, fontweight='bold')
+
+# Set y-axis limits to better show the differences
+plt.ylim(0.65, 0.76)
+
+# Remove top and right spines
+ax = plt.gca()
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+# Make left and bottom spines thicker
+ax.spines['left'].set_linewidth(2)
+ax.spines['bottom'].set_linewidth(2)
+
+# Make tick labels font size 14
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+
+# Set specific x-axis ticks
+plt.xticks(distances)
+
+# # Add grid for better readability
+# plt.grid(axis='y', alpha=0.3, linestyle='--')
+
+plt.tight_layout()
+plt.show()
+
+# Print the data for reference
+print("Distance vs Sag Ratio Summary:")
+print("-" * 30)
+for dist, ratio, label in zip(distances, sag_ratios, labels):
+    print(f"{label:>10} (d = {dist:>3}): Sag ratio = {ratio:.3f}")
+	
+	-------------
+	
+Distance vs Sag Ratio Summary:
+------------------------------
+      Soma (d =   0): Sag ratio = 0.683
+  Proximal (d =  55): Sag ratio = 0.688
+    Medial (d = 155): Sag ratio = 0.696
+    Distal (d = 305): Sag ratio = 0.744
+	
+	
+
