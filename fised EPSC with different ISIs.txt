@@ -1,0 +1,361 @@
+# run 9 simulations with fixed stimulation weight and varying time intervals
+
+# stimulation intervals 
+isi = [150,100,50,40, 30,20, 10, 5, 2.5]  # in ms
+
+# weight for all simulations 
+fixed_weight = 0.00073  # around 50pA/ 0.05 nA
+
+# Define the baseline and threshold voltages
+baseline_voltage = -68.59  # mV, resting potential
+threshold_voltage = -45.0  # mV, upper threshold for AUC calculation (added from first code)
+
+# Create a new figure for voltage plots
+fig_voltage = plt.figure(figsize=(16, 12))
+fig_voltage.suptitle('Somatic Voltage with Different Stimulation Intervals (Fixed Weight: 0.00073 uS)', fontsize=16)
+
+# Create a figure for current (EPSC) plots
+fig_current = plt.figure(figsize=(16, 12))
+fig_current.suptitle('Synaptic Currents (EPSCs) with Different Stimulation Intervals (Fixed Weight: 0.00073 uS)', fontsize=16)
+
+# Arrays to store results
+peak_voltages = []
+AP_counts = []
+auc_values = []
+# Threshold for detecting action potentials (in mV)
+ap_threshold = 0
+
+# Run simulation for each interval
+for i, interval in enumerate(isi):
+    # Set up the model cell components (assuming these are defined elsewhere in your code)
+    # You may need to re-initialize these for each simulation if needed
+    
+    # Set up synapses on apical trunk
+    syn1 = h.Exp2Syn(radTprox(0.5))
+    syn1.tau1 = 1     # ms, rise time 
+    syn1.tau2 = 5     # ms, decay time
+    syn1.e = 0        # mV, reversal potential
+
+    syn2 = h.Exp2Syn(radTmed(0.5))
+    syn2.tau1 = 1   
+    syn2.tau2 = 5     
+    syn2.e = 0          
+
+    syn3 = h.Exp2Syn(radTdist(0.5))
+    syn3.tau1 = 1 
+    syn3.tau2 = 5
+    syn3.e = 0          
+
+    # Create NetStim objects with varied timing
+    stim1 = h.NetStim()
+    stim1.number = 1      # num of spikes
+    stim1.start = 150     # ms, start time for first stimulus
+    stim1.noise = 0.0     
+    stim1.interval = 0    # ms
+
+    stim2 = h.NetStim()
+    stim2.number = 1      
+    stim2.start = 150 + interval  # Second stimulus starts after interval
+    stim2.noise = 0.0    
+    stim2.interval = 0   
+
+    stim3 = h.NetStim()
+    stim3.number = 1      
+    stim3.start = 150 + (2 * interval)  # Third stimulus starts after 2x interval
+    stim3.noise = 0.0  
+    stim3.interval = 0    
+
+    # NetCon connections with fixed weight
+    nc1 = h.NetCon(stim1, syn1)
+    nc1.delay = 0          
+    nc1.weight[0] = fixed_weight
+
+    nc2 = h.NetCon(stim2, syn2)
+    nc2.delay = 0          
+    nc2.weight[0] = fixed_weight
+
+    nc3 = h.NetCon(stim3, syn3)
+    nc3.delay = 0          
+    nc3.weight[0] = fixed_weight
+
+    # Recording from soma
+    iclamp = h.IClamp(soma(0.5))
+    iclamp.delay = 100   
+    iclamp.dur = 650
+    iclamp.amp = 0      
+
+    # Recording vectors for somatic voltage and time
+    v_epsp = h.Vector()             
+    t_epsp = h.Vector()             
+    v_epsp.record(soma(0.5)._ref_v)
+    t_epsp.record(h._ref_t)
+
+    # Recordings for synaptic currents
+    i_syn1 = h.Vector().record(syn1._ref_i)  # Current through syn 1
+    i_syn2 = h.Vector().record(syn2._ref_i)  # Current through syn 2
+    i_syn3 = h.Vector().record(syn3._ref_i)  # Current through syn 3
+
+    print(f"Simulation {i+1}/9: Fixed weight {fixed_weight}, Interval {interval} ms")
+    
+    tstop_simulation = 150 + (2 * interval) + 100  # Ensure we capture all responses
+    # Run the simulation
+    h.v_init = baseline_voltage
+    h.tstop = tstop_simulation
+    h.run()
+    
+    # Calculate peak voltage
+    peak_voltage = max(v_epsp)
+    peak_voltages.append(peak_voltage)
+    
+    # Count action potentials
+    ap_count = 0
+    for j in range(1, len(v_epsp)):
+        if v_epsp[j] >= ap_threshold and v_epsp[j-1] < ap_threshold:
+            ap_count += 1
+    
+    AP_counts.append(ap_count)
+    
+    # Calculate the time step between points
+    dt = t_epsp[1] - t_epsp[0]
+    
+    # Calculate the maximum time for this simulation
+    max_time = 150 + (2 * interval) + 100
+    
+    # Extract the time window of interest (from first stim to end of recording)
+    start_idx = 0
+    for k, t in enumerate(t_epsp):
+        if t >= 150:
+            start_idx = k
+            break
+    
+    # Find the end index safely
+    end_idx = len(t_epsp) - 1  # Default to the last point
+    for l, t in enumerate(t_epsp):
+        if t >= max_time:
+            end_idx = l
+            break
+        
+    v_list = np.array([v_epsp.get(k) for k in range(start_idx, end_idx+1)])
+    t_list = np.array([t_epsp.get(l) for l in range(start_idx, end_idx+1)])
+    
+    # Calculate AUC between baseline and threshold (similar to first code)
+    # First, clip values to be between baseline and threshold
+    v_clipped = np.clip(v_list, baseline_voltage, threshold_voltage)
+    
+    # Calculate voltage above baseline, but only up to threshold
+    voltage_above_baseline = v_clipped - baseline_voltage
+    
+    # Calculate AUC using trapezoidal rule
+    auc = np.trapz(voltage_above_baseline, x=t_list)
+    auc_values.append(auc)
+    
+    # Plot voltage in a subplot
+    plt.figure(fig_voltage.number)
+    ax_v = fig_voltage.add_subplot(3, 3, i+1)
+    ax_v.plot(t_epsp, v_epsp, "red")
+    
+    # Fill area between baseline and actual voltage, but only up to threshold
+    ax_v.fill_between(t_list, baseline_voltage, v_clipped, 
+                     where=(v_list > baseline_voltage), 
+                     color='red', alpha=0.3,
+                     label='AUC (baseline to threshold)')
+    
+    # Add lines for baseline and threshold
+    ax_v.axhline(y=baseline_voltage, color='gray', linestyle='--', linewidth=1, 
+                label=f'Baseline ({baseline_voltage} mV)')
+    ax_v.axhline(y=threshold_voltage, color='blue', linestyle='--', linewidth=1,
+                label=f'Threshold ({threshold_voltage} mV)')
+    
+    ax_v.set_xlim(100, min(650, 150 + (2 * interval) + 100))
+    ax_v.set_xlabel('Time (ms)')
+    ax_v.set_ylabel('Voltage (mV)')
+    ax_v.set_title(f'Interval: {interval} ms')
+    
+    # Dynamic y-axis scaling based on presence of APs
+    if ap_count > 0:
+        ax_v.set_ylim(-83, 42)  
+    else:
+        y_max = min(peak_voltage + 2, -30)  # Show up to peak+2 or -30mV, whichever is lower
+        ax_v.set_ylim(-70, y_max)
+    
+    # Add text annotation with peak voltage, AP count, and AUC
+    ax_v.text(0.75, 0.95, f"Peak: {peak_voltage:.2f} mV\nAPs: {ap_count}\nAUC: {auc:.2f}", 
+              transform=ax_v.transAxes, fontsize=9, 
+              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+    
+    # Add legend to the first subplot
+    if i == 0:
+        ax_v.legend(loc="lower right", fontsize=8)
+    
+    # Plot EPSCs in a subplot
+    plt.figure(fig_current.number)
+    ax_i = fig_current.add_subplot(3, 3, i+1)
+    ax_i.plot(t_epsp, i_syn1, "blue", label='radTdist, d = 255 um')
+    ax_i.plot(t_epsp, i_syn2, "orange", label='radTmed, d = 155 um')
+    ax_i.plot(t_epsp, i_syn3, "green", label='radTprox, d = 55 um')
+    ax_i.set_xlim(130, min(650, 150 + (2 * interval) + 30))
+    ax_i.set_xlabel('Time (ms)')
+    ax_i.set_ylabel('Current (nA)')
+    ax_i.set_title(f'Inter Stimulus Interval: {interval} ms')
+    
+    # Only add legend to the first subplot to save space
+    if i == 0:
+        ax_i.legend(loc="lower right", fontsize=8)
+
+# Adjust layout for both figures
+plt.figure(fig_voltage.number)
+plt.tight_layout(rect=[0, 0, 1, 0.95])  # Make room for the suptitle
+plt.savefig("EPSP_at_Soma_with_varied_ISI(1105).png", dpi=300, bbox_inches="tight")
+
+plt.figure(fig_current.number)
+plt.tight_layout(rect=[0, 0, 1, 0.95])  # Make room for the suptitle
+plt.savefig("EPSC_with_varied_ISI(1).png", dpi=300, bbox_inches="tight")
+
+# Create an additional figure for AUC vs interval
+# Create an additional figure for AUC vs interval with linear fit
+from scipy import stats
+import numpy as np
+
+# Perform linear regression
+slope, intercept, r_value, p_value, std_err = stats.linregress(isi, auc_values)
+line = slope * np.array(isi) + intercept
+
+# Create the plot with the regression line
+fig_auc_linear = plt.figure(figsize=(10, 6))
+plt.plot(isi, auc_values, 'o', color='green', markersize=8, label='Data points')
+plt.plot(isi, line, 'r--', linewidth=1, label=f'Linear fit (r² = {r_value**2:.3f})')
+
+plt.xlabel('Inter-stimulus Interval (ms)', fontsize=14)
+plt.ylabel('Area Under Curve', fontsize=14)
+# plt.title('Temporal Summation Effect: AUC vs Stimulation Interval with Linear Fit', fontsize=16)
+# plt.grid(True, alpha=0.3)
+plt.gca().invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+# plt.legend(fontsize=12, loc='upper left', bbox_to_anchor=(0.05, 0.95))
+
+# # Add regression equation to the plot
+# equation = f'AUC = {slope:.4f} × Interval + {intercept:.4f}'
+# plt.annotate(equation, xy=(0.05, 0.95), xycoords='axes fraction', 
+#              fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+# # Add statistical values
+# stats_text = f'R² = {r_value**2:.3f}\np-value = {p_value:.4f}'
+# plt.annotate(stats_text, xy=(0.05, 0.85), xycoords='axes fraction', 
+#              fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+plt.tight_layout()
+plt.savefig("AUC_vs_Interval_LinearFit(1).png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# Optional: Print the regression statistics for reference
+print(f"Slope: {slope:.6f}")
+print(f"Intercept: {intercept:.6f}")
+print(f"R-squared: {r_value**2:.6f}")
+print(f"P-value: {p_value:.6f}")
+print(f"Standard Error: {std_err:.6f}")
+
+# Create a summary table figure
+fig_summary = plt.figure(figsize=(12, 6))
+ax_table = fig_summary.add_subplot(111)
+ax_table.axis('off')  # Hide axes
+
+# Create table data
+table_data = [
+    ['Simulation', 'Inter-stimulus interval (ms)', 'Peak Voltage (mV)', 'AP Count', 'AUC']
+]
+for i, interval in enumerate(isi):
+    table_data.append([
+        f"{i+1}", 
+        f"{interval}",
+        f"{peak_voltages[i]:.2f}",
+        f"{AP_counts[i]}",
+        f"{auc_values[i]:.2f}"
+    ])
+
+# Create the table
+table = ax_table.table(
+    cellText=table_data,
+    loc='center',
+    cellLoc='center',
+    colWidths=[0.15, 0.20, 0.20, 0.15, 0.20]
+)
+
+# Style the table
+table.auto_set_font_size(False)
+table.set_fontsize(12)
+table.scale(1.2, 1.5)
+
+# Style header row
+for j in range(len(table_data[0])):
+    table[(0, j)].set_facecolor('#4472C4')
+    table[(0, j)].set_text_props(color='white', fontweight='bold')
+
+# Add a title
+fig_summary.suptitle('Temporal Summation: Effect of Stimulation Intervals', fontsize=16)
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.savefig("Simulation_Summary_isi.png", dpi=300, bbox_inches="tight")
+plt.show()
+# Create the plot with the regression line
+fig_auc_linear = plt.figure(figsize=(10, 6))
+plt.plot(isi, auc_values, 'o-', color='green', markersize=8)
+
+plt.xlabel('Inter-stimulus Interval (ms)', fontsize=14)
+plt.ylabel('Area Under Curve', fontsize=14)
+# plt.title('Temporal Summation Effect: AUC vs Stimulation Interval with Linear Fit', fontsize=16)
+# plt.grid(True, alpha=0.3)
+plt.gca().invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+# plt.legend(fontsize=12, loc='upper left', bbox_to_anchor=(0.05, 0.95))
+
+# # Add regression equation to the plot
+# equation = f'AUC = {slope:.4f} × Interval + {intercept:.4f}'
+# plt.annotate(equation, xy=(0.05, 0.95), xycoords='axes fraction', 
+#              fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+# # Add statistical values
+# stats_text = f'R² = {r_value**2:.3f}\np-value = {p_value:.4f}'
+# plt.annotate(stats_text, xy=(0.05, 0.85), xycoords='axes fraction', 
+#              fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+plt.tight_layout()
+plt.savefig("AUC_vs_Interval_with_fixed_epsc(1)).png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# Create an additional figure for AUC vs interval with linear fit
+from scipy import stats
+import numpy as np
+
+# Perform linear regression
+slope, intercept, r_value, p_value, std_err = stats.linregress(isi, auc_values)
+line = slope * np.array(isi) + intercept
+
+# Create the plot with the regression line
+fig_auc_linear = plt.figure(figsize=(10, 6))
+plt.plot(isi, auc_values, 'o', color='green', markersize=8, label='Data points')
+plt.plot(isi, line, 'r--', linewidth=1, label=f'Linear fit (r² = {r_value**2:.3f})')
+
+plt.xlabel('Inter-stimulus Interval (ms)', fontsize=14)
+plt.ylabel('Area Under Curve', fontsize=14)
+# plt.title('Temporal Summation Effect: AUC vs Stimulation Interval with Linear Fit', fontsize=16)
+# plt.grid(True, alpha=0.3)
+plt.gca().invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+# plt.legend(fontsize=12, loc='upper left', bbox_to_anchor=(0.05, 0.95))
+
+# # Add regression equation to the plot
+# equation = f'AUC = {slope:.4f} × Interval + {intercept:.4f}'
+# plt.annotate(equation, xy=(0.05, 0.95), xycoords='axes fraction', 
+#              fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+# # Add statistical values
+# stats_text = f'R² = {r_value**2:.3f}\np-value = {p_value:.4f}'
+# plt.annotate(stats_text, xy=(0.05, 0.85), xycoords='axes fraction', 
+#              fontsize=12, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+plt.tight_layout()
+plt.savefig("AUC_vs_Interval_LinearFit.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# Optional: Print the regression statistics for reference
+print(f"Slope: {slope:.6f}")
+print(f"Intercept: {intercept:.6f}")
+print(f"R-squared: {r_value**2:.6f}")
+print(f"P-value: {p_value:.6f}")
+print(f"Standard Error: {std_err:.6f}")

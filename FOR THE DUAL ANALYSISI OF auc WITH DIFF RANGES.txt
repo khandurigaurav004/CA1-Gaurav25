@@ -1,0 +1,61 @@
+fig_compare_dual = plt.figure(figsize=(16, 10))  # Create two subplots
+ax1 = fig_compare_dual.add_subplot(211)  # Bar graph
+ax2 = fig_compare_dual.add_subplot(212)  # Line graph
+
+# Bar graph in top subplot
+bars1 = ax1.bar(index - bar_width/2, auc_values_set1, bar_width,
+                color='skyblue', label='EPSC range  1 [-20, -26, -32]pA')
+bars2 = ax1.bar(index + bar_width/2, auc_values_set2, bar_width,
+               color='salmon', label='EPSC range 2 [-38, -44, -50]pA')
+
+ax1.set_xlabel('Inter-Stimulus Interval (ms)', fontsize=12)
+ax1.set_ylabel('Area Under Curve', fontsize=12)
+ax1.set_title('Bar Graph: AUC vs Inter-Stimulus Interval', fontsize=14)
+ax1.set_xticks(index)
+ax1.set_xticklabels(stim_intervals)
+ax1.legend()
+# ax1.grid(True, alpha=0.3, axis='y')
+
+# Add value labels on top of each bar
+for bar in bars1:
+    height = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+            f'{height:.2f}', ha='center', va='bottom', fontsize=9)
+            
+for bar in bars2:
+    height = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+            f'{height:.2f}', ha='center', va='bottom', fontsize=9)
+
+# Line graph in bottom subplot - with inverted x-axis
+ax2.plot(stim_intervals, auc_values_set1, 'bo-', linewidth=2, markersize=8,
+         label='EPSC range [-20, -26, -32]pA')
+ax2.plot(stim_intervals, auc_values_set2, 'ro-', linewidth=2, markersize=8,
+         label='EPSC range [-38, -44, -50]pA')
+ax2.set_xlabel('Inter-Stimulus Interval (ms)', fontsize=12)
+ax2.set_ylabel('Area Under Curve', fontsize=12)
+ax2.set_title('Line Graph: AUC vs Inter-Stimulus Interval', fontsize=14)
+# ax2.grid(True, alpha=0.3)
+# ax2.legend()
+ax2.invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+
+# Main title for the entire figure
+fig_compare_dual.suptitle('Comparison of Temporal Summation (AUC) Between EPSC range', fontsize=16)
+
+# Adjust spacing between subplots
+plt.tight_layout(rect=[0, 0, 1, 0.95])  # Make room for the suptitle
+plt.savefig("AUC_Comparison_Dualnew(1105).png", dpi=300, bbox_inches="tight")
+
+
+________------------------------------------------------------------------------------------------------------------------------
+
+# Create an additional figure for AUC vs interval
+fig_auc = plt.figure(figsize=(10, 6))
+plt.plot(stim_intervals, auc_values, 'bo-', linewidth=2, markersize=8)
+plt.xlabel('Stimulation Interval (ms)', fontsize=14)
+plt.ylabel('Area Under Curve', fontsize=14)
+plt.title('Temporal Summation Effect: AUC vs Stimulation Interval', fontsize=16)
+plt.grid(True, alpha=0.3)
+plt.gca().invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+plt.tight_layout()
+plt.savefig("AUC_vs_Interval.png", dpi=300, bbox_inches="tight")

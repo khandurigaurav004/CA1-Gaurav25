@@ -1,0 +1,359 @@
+# run 9 simulations with linearly decreasing stimulation weights and varying time intervals
+
+# Stimulation intervals 
+stim_intervals = [30, 20, 10, 5, 4, 3, 2.5, 2, 1.5]  # in ms
+
+# Two sets of weights for the simulations
+weight_sets = [
+    [0.000292, 0.000379, 0.000467],         # First set: -20, -26, -32pa
+    [0.000554, 0.000641, 0.000729]      # Second set: -38, -44, -50pA
+]
+
+# Initialize arrays to store AUC values
+auc_values_set1 = []
+auc_values_set2 = []
+
+# Define the baseline and threshold voltages
+baseline_voltage = -68.60  # mV, resting potential
+threshold_voltage = -45.0  # mV, upper threshold for AUC calculation
+
+# Run the simulation for each set of weights
+for weight_set_idx, weights in enumerate(weight_sets):
+    print(f"\n\n==== RUNNING SIMULATION SET {weight_set_idx + 1}: Weights = {weights} ====\n")
+    
+    # Create a new figure for voltage plots
+    fig_voltage = plt.figure(figsize=(16, 12))
+    fig_voltage.suptitle(f'Somatic Voltage with Different ISI (EPSCs range {weight_set_idx + 1})', fontsize=16)
+
+    # Create a figure for current (EPSC) plots
+    fig_current = plt.figure(figsize=(16, 12))
+    fig_current.suptitle(f'Synaptic Currents (EPSCs) with ISI (EPSCs range {weight_set_idx + 1})', fontsize=16)
+
+    # Arrays to store results
+    peak_voltages = []
+    AP_counts = []
+    auc_values = []
+    
+    # Threshold for detecting action potentials (in mV)
+    ap_threshold = 0
+
+    # Run simulation for each interval
+    for i, interval in enumerate(stim_intervals):
+        # Set up synapses on apical trunk
+        syn1 = h.Exp2Syn(radTprox(0.5))
+        syn1.tau1 = 1     # ms, rise time 
+        syn1.tau2 = 5     # ms, decay time
+        syn1.e = 0        # mV, reversal potential
+
+        syn2 = h.Exp2Syn(radTmed(0.5))
+        syn2.tau1 = 1   
+        syn2.tau2 = 5     
+        syn2.e = 0          
+
+        syn3 = h.Exp2Syn(radTdist(0.5))
+        syn3.tau1 = 1 
+        syn3.tau2 = 5
+        syn3.e = 0          
+
+        # Create NetStim objects with varied timing
+        stim1 = h.NetStim()
+        stim1.number = 1      # num of spikes
+        stim1.start = 150     # ms, start time for first stimulus
+        stim1.noise = 0.0     
+        stim1.interval = 0    # ms
+
+        stim2 = h.NetStim()
+        stim2.number = 1      
+        stim2.start = 150 + interval  # Second stimulus starts after interval
+        stim2.noise = 0.0    
+        stim2.interval = 0   
+
+        stim3 = h.NetStim()
+        stim3.number = 1      
+        stim3.start = 150 + (2 * interval)  # Third stimulus starts after 2x interval
+        stim3.noise = 0.0  
+        stim3.interval = 0    
+
+        # NetCon connections with linearly decreasing weights
+        nc1 = h.NetCon(stim1, syn1)
+        nc1.delay = 0          
+        nc1.weight[0] = weights[0]  # First synapse weight
+
+        nc2 = h.NetCon(stim2, syn2)
+        nc2.delay = 0          
+        nc2.weight[0] = weights[1]  # Second synapse weight
+
+        nc3 = h.NetCon(stim3, syn3)
+        nc3.delay = 0          
+        nc3.weight[0] = weights[2]  # Third synapse weight
+
+        # Recording from soma
+        iclamp = h.IClamp(soma(0.5))
+        iclamp.delay = 100   
+        iclamp.dur = 650
+        iclamp.amp = 0      
+
+        # Recording vectors for somatic voltage and time
+        v_epsp = h.Vector()             
+        t_epsp = h.Vector()             
+        v_epsp.record(soma(0.5)._ref_v)
+        t_epsp.record(h._ref_t)
+
+        # Recordings for synaptic currents
+        i_syn1 = h.Vector().record(syn1._ref_i)  # Current through syn 1
+        i_syn2 = h.Vector().record(syn2._ref_i)  # Current through syn 2
+        i_syn3 = h.Vector().record(syn3._ref_i)  # Current through syn 3
+
+        print(f"Simulation {i+1}/9: Weight Set {weight_set_idx + 1}, Interval {interval} ms")
+        print(f"  - Weights: syn1={weights[0]:.6f}, syn2={weights[1]:.6f}, syn3={weights[2]:.6f}")
+        
+        tstop_simulation = 150 + (2 * interval) + 100  # Ensure we capture all responses
+        # Run the simulation
+        h.v_init = baseline_voltage
+        h.tstop = tstop_simulation
+        h.run()
+        
+        # Calculate peak voltage
+        peak_voltage = max(v_epsp)
+        peak_voltages.append(peak_voltage)
+        
+        # Count action potentials
+        ap_count = 0
+        for j in range(1, len(v_epsp)):
+            if v_epsp[j] >= ap_threshold and v_epsp[j-1] < ap_threshold:
+                ap_count += 1
+        
+        AP_counts.append(ap_count)
+        
+        # Calculate the time step between points
+        dt = t_epsp[1] - t_epsp[0]
+        
+        # Calculate the maximum time for this simulation
+        max_time = 150 + (2 * interval) + 100
+        
+        # Extract the time window of interest (from first stim to end of recording)
+        start_idx = 0
+        for k, t in enumerate(t_epsp):
+            if t >= 150:
+                start_idx = k
+                break
+        
+        # Find the end index safely
+        end_idx = len(t_epsp) - 1  # Default to the last point
+        for l, t in enumerate(t_epsp):
+            if t >= max_time:
+                end_idx = l
+                break
+            
+        v_list = np.array([v_epsp.get(k) for k in range(start_idx, end_idx+1)])
+        t_list = np.array([t_epsp.get(l) for l in range(start_idx, end_idx+1)])
+        
+        # Calculate AUC between baseline and threshold
+        # First, clip values to be between baseline and threshold
+        v_clipped = np.clip(v_list, baseline_voltage, threshold_voltage)
+        
+        # Calculate voltage above baseline, but only up to threshold
+        voltage_above_baseline = v_clipped - baseline_voltage
+        
+        # Calculate AUC using trapezoidal rule
+        auc = np.trapz(voltage_above_baseline, x=t_list)
+        auc_values.append(auc)
+        
+        # Plot voltage in a subplot
+        plt.figure(fig_voltage.number)
+        ax_v = fig_voltage.add_subplot(3, 3, i+1)
+        ax_v.plot(t_epsp, v_epsp, "red")
+        
+        # Fill area between baseline and actual voltage, but only up to threshold
+        ax_v.fill_between(t_list, baseline_voltage, v_clipped, 
+                         where=(v_list > baseline_voltage), 
+                         color='red', alpha=0.3,
+                         label='AUC (baseline to threshold)')
+        
+        # Add lines for baseline and threshold
+        ax_v.axhline(y=baseline_voltage, color='gray', linestyle='--', linewidth=1, 
+                    label=f'Baseline ({baseline_voltage} mV)')
+        ax_v.axhline(y=threshold_voltage, color='blue', linestyle='--', linewidth=1,
+                    label=f'Threshold ({threshold_voltage} mV)')
+        
+        ax_v.set_xlim(100, min(650, 150 + (2 * interval) + 100))
+        ax_v.set_xlabel('Time (ms)')
+        ax_v.set_ylabel('Voltage (mV)')
+        ax_v.set_title(f'Inter-stimulus Interval: {interval} ms')
+        
+        # Dynamic y-axis scaling based on presence of APs
+        if ap_count > 0:
+            ax_v.set_ylim(-83, 42)  
+        else:
+            y_max = min(peak_voltage + 2, -30)  # Show up to peak+2 or -30mV, whichever is lower
+            ax_v.set_ylim(-70, y_max)
+        
+        # Add text annotation with peak voltage, AP count, and AUC
+        ax_v.text(0.75, 0.95, f"Peak: {peak_voltage:.2f} mV\nAPs: {ap_count}\nAUC: {auc:.2f}", 
+                transform=ax_v.transAxes, fontsize=9, 
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+        
+        # Add legend to the first subplot
+        if i == 0:
+            ax_v.legend(loc="lower right", fontsize=8)
+        
+        # Plot EPSCs in a subplot
+        plt.figure(fig_current.number)
+        ax_i = fig_current.add_subplot(3, 3, i+1)
+        ax_i.plot(t_epsp, i_syn1, "blue", label='radTprox, d = 55 um')
+        ax_i.plot(t_epsp, i_syn2, "orange", label='radTmed, d = 155 um')
+        ax_i.plot(t_epsp, i_syn3, "green", label='radTdist, d = 255 um')
+        ax_i.set_xlim(100, min(650, 150 + (2 * interval) + 100))
+        ax_i.set_xlabel('Time (ms)')
+        ax_i.set_ylabel('Current (nA)')
+        ax_i.set_title(f'Inter-stimulus interval: {interval} ms')
+        
+        # Only add legend to the first subplot to save space
+        if i == 0:
+            ax_i.legend(loc="lower right", fontsize=8)
+
+    # Adjust layout for both figures
+    plt.figure(fig_voltage.number)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Make room for the suptitle
+    plt.savefig(f"EPSP_at_Soma_with_varied_ISI_range_{weight_set_idx + 1}.png", dpi=300, bbox_inches="tight")
+
+    plt.figure(fig_current.number)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Make room for the suptitle
+    plt.savefig(f"EPSC_with_varied_ISIs_ISI_range_{weight_set_idx + 1}.png", dpi=300, bbox_inches="tight")
+
+    # Create an additional figure for AUC vs interval
+    fig_auc = plt.figure(figsize=(10, 6))
+    plt.plot(stim_intervals, auc_values, 'bo-', linewidth=2, markersize=8)
+    plt.xlabel('ISIs (ms)', fontsize=14)
+    plt.ylabel('Area Under Curve', fontsize=14)
+    plt.title(f'Temporal Summation Effect: AUC vs Inter-Stimuls Interval (Weight Set {weight_set_idx + 1})', fontsize=16)
+    # plt.grid(True, alpha=0.3)
+    plt.gca().invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+    plt.tight_layout()
+    plt.savefig(f"AUC_vs_ISI_range_{weight_set_idx + 1}.png", dpi=300, bbox_inches="tight")
+
+    # Create a summary table figure
+    fig_summary = plt.figure(figsize=(12, 6))
+    ax_table = fig_summary.add_subplot(111)
+    ax_table.axis('off')  # Hide axes
+
+    # Create table data
+    table_data = [
+        ['Simulation', 'Inter-stimulus interval (ms)', 'Peak Voltage (mV)', 'AP Count', 'AUC']
+    ]
+    for i, interval in enumerate(stim_intervals):
+        table_data.append([
+            f"{i+1}", 
+            f"{interval}",
+            f"{peak_voltages[i]:.2f}",
+            f"{AP_counts[i]}",
+            f"{auc_values[i]:.2f}"
+        ])
+
+    # Create the table
+    table = ax_table.table(
+        cellText=table_data,
+        loc='center',
+        cellLoc='center',
+        colWidths=[0.15, 0.20, 0.20, 0.15, 0.20]
+    )
+
+    # Style the table
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.5)
+
+    # Style header row
+    for j in range(len(table_data[0])):
+        table[(0, j)].set_facecolor('#4472C4')
+        table[(0, j)].set_text_props(color='white', fontweight='bold')
+
+    # Add a title
+    fig_summary.suptitle(f'Temporal Summation: Effect of Stimulation Intervals (Weight Set {weight_set_idx + 1})', fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig(f"Simulation_Summary_ISI_range_{weight_set_idx + 1}.png", dpi=300, bbox_inches="tight")
+
+    # Store AUC values in the appropriate set
+    if weight_set_idx == 0:
+        auc_values_set1 = auc_values.copy()  # Make sure to copy the values
+    else:
+        auc_values_set2 = auc_values.copy()  # Make sure to copy the values
+
+# After both simulations, create a comparison bar graph
+fig_compare = plt.figure(figsize=(14, 8))
+
+# Set bar width and positions
+bar_width = 0.35
+index = np.arange(len(stim_intervals))
+
+# Create grouped bar chart
+bars1 = plt.bar(index - bar_width/2, auc_values_set1, bar_width, 
+               color='skyblue', label='EPSC range  1 [-20, -26, -32]pA')
+bars2 = plt.bar(index + bar_width/2, auc_values_set2, bar_width,
+               color='salmon', label='EPSC range 2 [-38, -44, -50]pA')
+
+# Customize the plot
+plt.xlabel('Inter-Stimulus Interval (ms)', fontsize=14)
+plt.ylabel('Area Under Curve', fontsize=14)
+plt.title('Comparison of Temporal Summation (AUC) Between EPSC range', fontsize=16)
+plt.xticks(index, stim_intervals)
+plt.legend(fontsize=12)
+# plt.grid(True, alpha=0.3, axis='y')
+
+# Add value labels on top of each bar
+def add_labels(bars):
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                f'{height:.1f}', ha='center', va='bottom', fontsize=9)
+
+add_labels(bars1)
+add_labels(bars2)
+
+# Adjust layout and save
+plt.tight_layout()
+plt.savefig("AUC_Comparison_Bar.png", dpi=300, bbox_inches="tight")
+
+# Also create a summary figure comparing AUC values with both bar and line graphs
+fig_compare_dual = plt.figure(figsize=(16, 10))
+
+# Create two subplots
+ax1 = fig_compare_dual.add_subplot(211)  # Bar graph
+ax2 = fig_compare_dual.add_subplot(212)  # Line graph
+
+# Bar graph in top subplot
+bars1 = ax1.bar(index - bar_width/2, auc_values_set1, bar_width, 
+               color='skyblue', label='EPSC range  1 [-20, -26, -32]pA')
+bars2 = ax1.bar(index + bar_width/2, auc_values_set2, bar_width,
+               color='salmon', label='EPSC range 2 [-38, -44, -50]pA')
+
+ax1.set_xlabel('Inter-Stimulus Interval (ms)', fontsize=12)
+ax1.set_ylabel('Area Under Curve', fontsize=12)
+ax1.set_title('Bar Graph: AUC vs Inter-Stimulus Interval', fontsize=14)
+ax1.set_xticks(index)
+ax1.set_xticklabels(stim_intervals)
+ax1.legend()
+ax1.grid(True, alpha=0.3, axis='y')
+
+# Add value labels on top of each bar
+add_labels(bars1)
+add_labels(bars2)
+
+# Line graph in bottom subplot - with inverted x-axis
+ax2.plot(stim_intervals, auc_values_set1, 'bo-', linewidth=2, markersize=8, 
+         label='EPSC range [-20, -26, -32]pA')
+ax2.plot(stim_intervals, auc_values_set2, 'ro-', linewidth=2, markersize=8, 
+         label='EPSC range [-38, -44, -50]pA')
+ax2.set_xlabel('Inter-Stimulus Interval (ms)', fontsize=12)
+ax2.set_ylabel('Area Under Curve', fontsize=12)
+ax2.set_title('Line Graph: AUC vs Inter-Stimulus Interval', fontsize=14)
+# ax2.grid(True, alpha=0.3)
+ax2.legend()
+ax2.invert_xaxis()  # Invert x-axis so shorter intervals are on the right
+
+# Main title for the entire figure
+fig_compare_dual.suptitle('Comparison of Temporal Summation (AUC) Between EPSC range', fontsize=16)
+
+# Adjust spacing between subplots
+plt.tight_layout(rect=[0, 0, 1, 0.95])  # Make room for the suptitle
+plt.savefig("AUC_Comparison_Dualnew(1105).png", dpi=300, bbox_inches="tight")
