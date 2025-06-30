@@ -1,0 +1,60 @@
+# # Set up recording
+# v_vec = h.Vector().record(soma(0.5)._ref_v)
+# t_vec = h.Vector().record(h._ref_t)
+
+# # Define current injection parameters
+# start = 0.0   # nA
+# stop = 1.6    # nA
+# step = 0.1   # nA
+# currents = np.arange(start, stop + step, step)
+# stim_delay = 100   # ms
+# stim_dur = 1000    # ms
+# stim_total = stim_delay + stim_dur + 100  # ms, for baseline and recovery
+
+# results = []
+
+# for amp in currents:
+#     stim = h.IClamp(soma(0.5))
+#     stim.delay = stim_delay
+#     stim.dur = stim_dur
+#     stim.amp = amp
+
+#     h.finitialize(-65)
+#     h.continuerun(stim_total)
+    
+#     # Convert vectors to numpy for analysis
+#     t = np.array(t_vec)
+#     v = np.array(v_vec)
+    
+#     # Count spikes (simple threshold crossing)
+#     spikes = np.where((v[1:] > 0) & (v[:-1] <= 0))[0]
+#     n_spikes = len(spikes)
+    
+#     # Calculate mean voltage in last 100 ms of pulse
+#     last_100ms = (t > (stim_delay + stim_dur - 100)) & (t <= (stim_delay + stim_dur))
+#     veq = np.mean(v[last_100ms])
+    
+#     results.append({'amp': amp, 'n_spikes': n_spikes, 'veq': veq})
+
+#     # Remove stim for next run
+#     del stim
+
+# # Plot I/O curve: current vs. number of spikes
+# amps = [r['amp'] for r in results]
+# spikes = [r['n_spikes'] for r in results]
+# plt.plot(amps, spikes, marker='o', color='magenta', markersize=5, linestyle='-', linewidth=2)
+# plt.xlabel('Current amplitude (nA)')
+# plt.ylabel('Number of APs')
+# # plt.title('Depolarization Block I/O Curve')
+# plt.savefig('Depolarization_Block_IO_Curve.png', dpi=300)
+# # Plot the first 19 data points of amps and spikes
+# plt.show()
+
+
+plt.figure()
+plt.plot(amps[:19], spikes[:19], marker='o', color='green', markersize=5, linestyle='-', linewidth=2)
+plt.xlabel('Current amplitude (nA)')
+plt.ylabel('Number of APs')
+# plt.title('First 19 Data Points: Current vs. Number of APs')
+# plt.grid(True)
+plt.savefig('First_19_Data_Points_IO_Curve.png', dpi=300)
