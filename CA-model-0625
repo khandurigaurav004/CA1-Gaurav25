@@ -1,0 +1,509 @@
+from neuron import h, gui
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy import stats
+h.load_file("stdrun.hoc")
+h.nrn_load_dll(r'---address-to-mod-files')
+soma = h.Section(name='soma')
+
+#apical trunk
+radTprox = h.Section(name='radTprox')
+radTmed = h.Section(name='radTmed')
+radTdist = h.Section(name='radTdist')
+
+# slm1
+lm_thick1 = h.Section(name='lm_thick1')
+lm_medium1 = h.Section(name='lm_medium1')
+lm_thin1a = h.Section(name='lm_thin1a')
+lm_thin1b = h.Section(name='lm_thin1b')
+
+# slm2
+lm_thick2 = h.Section(name='lm_thick2')
+lm_medium2 = h.Section(name='lm_medium2')
+lm_thin2a = h.Section(name='lm_thin2a')
+lm_thin2b = h.Section(name='lm_thin2b')
+
+# rad1
+rad_thick1 = h.Section(name='rad_thick1')
+rad_medium1 = h.Section(name='rad_medium1')
+rad_thin1a = h.Section(name='lm_thin1a')
+rad_thin1b = h.Section(name='lm_thin1b')
+
+# rad2
+rad_thick2 = h.Section(name='rad_thick2')
+rad_medium2 = h.Section(name='rad_medium2')
+rad_thin2a = h.Section(name='rad_thin2a')
+rad_thin2b = h.Section(name='rad_thin2b')
+
+# basal dends
+oriprox1 = h.Section(name='oriprox1')
+oridist1a = h.Section(name='oridist1a')
+oridist1b = h.Section(name='oridist1b')
+oriprox2 = h.Section(name='oriprox2')
+oridist2a = h.Section(name='oridist2a')
+oridist2b = h.Section(name='oridist2b')
+
+axon = h.Section(name='axon') #axon
+# Geometry
+soma.L = soma.diam = 10
+
+radTprox.L = 100
+radTprox.diam = 4.0
+radTmed.L = 100
+radTmed.diam = 3.0
+radTdist.L = 200
+radTdist.diam = 2.0
+
+lm_thick1.L = 100
+lm_thick1.diam = 2.0
+lm_medium1.L = 100
+lm_medium1.diam = 1.5
+lm_thin1a.L= 50
+lm_thin1a.diam = 1.0
+lm_thin1b.L= 50
+lm_thin1b.diam = 1.0
+
+lm_thick2.L = 100
+lm_thick2.diam = 2.0
+lm_medium2.L = 100
+lm_medium2.diam= 1.5
+lm_thin2a.L= 50
+lm_thin2a.diam = 1.0
+lm_thin2b.L= 50
+lm_thin2b.diam = 1.0
+
+rad_thick1.L = 100   # Radiatum is final 300um of apical dendrite
+rad_thick1.diam = 2.0
+rad_medium1.L = 100
+rad_medium1.diam = 1.5
+rad_thin1a.L= 50
+rad_thin1a.diam = 1.0
+rad_thin1b.L= 50
+rad_thin1b.diam = 1.0
+
+rad_thick2.L = 100   
+rad_thick2.diam = 2.0
+rad_medium2.L = 100
+rad_medium2.diam = 1.5
+rad_thin2a.L= 50
+rad_thin2a.diam = 1.0
+rad_thin2b.L= 50
+rad_thin2b.diam = 1.0
+
+oriprox1.L = 100
+oriprox1.diam = 2.0
+oridist1a.L = 100
+oridist1a.diam = 1.5
+oridist1b.L = 100
+oridist1b.diam = 1.5
+
+oriprox2.L = 100  # Basal dendrites extend 300 um
+oriprox2.diam = 2.0
+oridist2a.L = 100
+oridist2a.diam = 1.5
+oridist2b.L = 100
+oridist2b.diam = 1.5
+
+axon.L = 150
+axon.diam = 1.0
+# topology
+radTprox.connect(soma(1))
+radTmed.connect(radTprox(1))
+radTdist.connect(radTmed(1))
+lm_thick2.connect(radTdist(1))
+lm_medium2.connect(lm_thick2(1))
+lm_thin2a.connect(lm_medium2(1))
+lm_thin2b.connect(lm_medium2(1))
+lm_thick1.connect(radTdist(1))
+lm_medium1.connect(lm_thick1(1))
+lm_thin1a.connect(lm_medium1(1))
+lm_thin1b.connect(lm_medium1(1))
+rad_thick2.connect(radTmed(1))
+rad_medium2.connect(rad_thick2(1))
+rad_thin2a.connect(rad_medium2(1))
+rad_thin2b.connect(rad_medium2(1))
+rad_thick1.connect(radTprox(1))
+rad_medium1.connect(rad_thick1(1))
+rad_thin1a.connect(rad_medium1(1))
+rad_thin1b.connect(rad_medium1(1))
+oriprox1.connect(soma(0))
+oridist1a.connect(oriprox1(1))
+oridist1b.connect(oriprox1(1))
+oriprox2.connect(soma(0))
+oridist2a.connect(oriprox2(1))
+oridist2b.connect(oriprox2(1))
+axon.connect(soma(0))
+# h.topology()
+s = h.Shape()
+# s.show(0)
+# segmentaiton based on d_lamda rule 
+soma.nseg = 1
+radTprox.nseg = 13
+radTmed.nseg = 15
+radTdist.nseg = 37
+lm_thick2.nseg = 13
+lm_medium2.nseg = 13
+lm_thin2a.nseg = 13
+lm_thin2b.nseg = 13
+lm_thick1.nseg = 19
+lm_medium1.nseg = 21
+lm_thin1a.nseg = 13
+lm_thin1b.nseg = 13
+rad_thick2.nseg = 19
+rad_medium2.nseg = 21
+rad_thin2a.nseg = 13
+rad_thin2b.nseg = 13
+rad_thick1.nseg = 19
+rad_medium1.nseg = 21
+rad_thin1a.nseg = 13
+rad_thin1b.nseg = 13
+oriprox1.nseg = 19
+oridist1a.nseg = 21                                                                                                                                                                
+oridist1b.nseg = 21
+oriprox2.nseg = 19
+oridist2a.nseg = 21
+oridist2b.nseg = 21
+axon.nseg = 3
+# subsets
+allsection_list = [soma, radTprox, radTmed, radTdist, lm_thick1, lm_medium1, lm_thin1a, lm_thin1b, lm_thick2, lm_medium2, lm_thin2a, lm_thin2b, rad_thick1, rad_medium1, rad_thin1a, rad_thin1b, rad_thick2, rad_medium2, rad_thin2a, rad_thin2b, oriprox1, oridist1a, oridist1b, oriprox2, oridist2a, oridist2b, axon]
+axonal_list = [axon]
+somatic_list= [soma]
+apical_list = [radTprox, radTmed, radTdist, lm_thick1, lm_medium1, lm_thin1a, lm_thin1b, lm_thick2, lm_medium2, lm_thin2a, lm_thin2b]
+basal_list = [oriprox1, oridist1a, oridist1b, oriprox2, oridist2a, oridist2b]
+oblique_list = [rad_thick1, rad_medium1, rad_thin1a, rad_thin1b, rad_thick2, rad_medium2, rad_thin2a, rad_thin2b]
+# passive and active mechs
+for sec in allsection_list:
+    sec.insert("pas")
+    sec.insert("kdr")
+    sec.insert("nax")
+
+for sec in somatic_list:
+    sec.insert("kmb")
+    sec.insert("kap")
+    sec.insert("hd")
+    sec.insert("can")
+    sec.insert("cal")
+    sec.insert("cat")
+    sec.insert("kca")
+    sec.insert("cagk")
+    sec.insert("cacum")
+
+for sec in apical_list:
+    # radTprox contains sec.insert("kmb") 
+    # radTprox contains sec.insert("kap")
+    sec.insert("kad")
+    sec.insert("hd")
+    sec.insert("can")
+    sec.insert("cal")
+    sec.insert("cat")
+    sec.insert("kca")
+    sec.insert("cagk")
+    sec.insert("cacum")
+
+for sec in oblique_list:
+    sec.insert("hd")
+    sec.insert("kad")
+    sec.insert("can")
+    sec.insert("cal")
+    sec.insert("cat")
+    sec.insert("kca")
+    sec.insert("cagk")
+    sec.insert("cacum")
+
+for sec in basal_list:
+    sec.insert("kap")
+    sec.insert("hd")
+    sec.insert("can")
+    sec.insert("cal")
+    sec.insert("cat")
+    sec.insert("kca")
+    sec.insert("cagk")
+    sec.insert("cacum")
+
+for sec in axonal_list:
+    sec.insert("kmb")
+    sec.insert("kap")
+
+h.celsius = 35
+# Biophysics
+
+for sec in somatic_list:
+    sec.ghdbar_hd   = 0.0002 
+    sec.gkabar_kap  = 0.16369  # check
+    sec.gbar_kmb    = 0.0014    # 0.001
+    sec.gkdrbar_kdr = 0.0015  # 0.00514
+    sec.gbar_nax    = 0.035  # 0.03325
+    sec.gcalbar_cal = 0.0005   # 1.3433464444108534e-06  # from ModelDB 2018006
+    sec.gcanbar_can = 0.00000226 # 9.1375529468386047e-06
+    sec.gcatbar_cat = 0.00005   # 5.2627884427712998e-06
+    sec.gbar_cagk   = 0.000045  # 3.8813989222985606e-05
+
+for sec in apical_list:
+    sec.gkdrbar_kdr = 0.0043036   # 0.0051140701369551591
+    sec.gbar_nax    = 0.03828     # 0.023865342299765658
+    sec.gcalbar_cal = 0.000008032 # 1.3433464444108534e-06
+    sec.gcanbar_can = 0.00000226   # 9.1375529468386047e-06
+    sec.gcatbar_cat = 0.00000118  # 5.2627884427712998e-06
+    sec.gbar_cagk   = 0.00004482  # 3.8813989222985606e-05
+
+radTprox.insert("kap")
+radTprox.gkabar_kap = 0.0075
+radTprox.insert("kmb")
+radTprox.gbar_kmb    = 0.0010
+
+for sec in oblique_list:
+    sec.gkdrbar_kdr = 0.0043036  # 0.0051140701369551591
+    sec.gbar_nax    = 0.03828    # 0.023865342299765658
+    sec.gcalbar_cal = 0.000008032  # 1.3433464444108534e-06
+    sec.gcanbar_can = 0.00000226  # 9.1375529468386047e-06
+    sec.gcatbar_cat = 0.00000118 # 5.2627884427712998e-06
+    sec.gbar_cagk   = 0.00004482 # 3.8813989222985606e-05
+
+for sec in basal_list:
+    sec.gkdrbar_kdr = 0.0043036   # 0.0051140701369551591
+    sec.gbar_nax    = 0.03828   # 0.023865342299765658
+    sec.gcalbar_cal = 0.000008032  # 1.3433464444108534e-06
+    sec.gcanbar_can = 0.00000226  # 9.1375529468386047e-06
+    sec.gcatbar_cat = 0.00000118 # 5.2627884427712998e-06
+    sec.gbar_cagk   = 0.00004482 # 3.8813989222985606e-05
+
+for sec in axonal_list:
+    sec.gbar_nax    = 0.0035 # 0.15092656523953063
+    sec.gkabar_kap  = 0.16369  # 0.17033392959442739
+    sec.gbar_kmb    = 0.02647  # 0.015708771639181624
+    sec.gkdrbar_kdr = 0.01166 # 0.012773439165875373
+
+
+# variation of Rm in all sections (# https://www.jneurosci.org/content/18/19/7613#sec-2)
+
+def calculate_Rm_conductance(distance, Rm_end=3800, Rm_soma=38000, d_half=205, z=50):
+    """
+    Calculate membrane conductance using sigmoidal function.
+    g_pas = 1/Rm where Rm = Rm_end + (Rm_soma - Rm_end) / (1 + exp[(d - d_half)/z])
+    
+    Parameters:
+    -----------
+    distance : float or array-like
+        Distance from soma center (μm)
+    Rm_end : float, default=3000
+        Membrane resistance at dendritic terminals (Ω·cm²)
+    Rm_soma : float, default=32000
+        Membrane resistance at soma (Ω·cm²)
+    d_half : float, default=205
+        Half-distance parameter (μm)
+    z : float, default=50
+        Slope parameter (μm)
+    
+    Returns:
+    --------
+    float or array
+        Membrane conductance values (S/cm²)
+    """
+    Rm = Rm_end + (Rm_soma - Rm_end) / (1 + np.exp((distance - d_half) / z))
+    return 1 / Rm
+
+# NEURON setup with integrated sigmoidal g_pas calculation
+for sec in allsection_list:
+    sec.Ra    = 150
+    sec.cm    = 1.0
+    sec.e_pas = -65 # from RMP
+    sec.ena   = 50
+    sec.ek    = -85
+
+    # Set distance reference point at soma center
+    h.distance(0, soma(0.5))
+    
+    # Apply sigmoidal variation of g_pas to each segment
+    for seg in sec:
+        distance = h.distance(seg.x, sec=sec)  # Distance from soma center to segment
+        seg.g_pas = calculate_Rm_conductance(distance)  # Calculate and assign g_pas
+
+
+# Calcium dependent K gradient
+
+def calculate_gbar_kca_distance(distance, gbar_kca_soma=0.0015, gbar_kca_50um=0.001):
+    """
+    Calculate gbar_kca with distance-dependent profile:
+    - Linear decrease from soma to 50 μm
+    - Exponential decay from 50 μm to 600 μm
+    - Zero beyond 600 μm
+    
+    Parameters:
+    -----------
+    distance : float or array-like
+        Distance from soma center (μm)
+    gbar_kca_soma : float, default=0.0015
+        Conductance at soma (S/cm²)
+    gbar_kca_50um : float, default=0.001
+        Conductance at 50 μm (S/cm²)
+    
+    Returns:
+    --------
+    float or array
+        gbar_kca conductance values (S/cm²)
+    """
+    # Convert to array for vectorized operations
+    distance = np.asarray(distance)
+    
+    # Region 1: Linear decrease from soma (0 μm) to 50 μm
+    if np.any(distance <= 50):
+        linear_region = gbar_kca_soma - (gbar_kca_soma - gbar_kca_50um) * (distance / 50.0)
+        gbar = np.where(distance <= 50, linear_region, 0)
+    else:
+        gbar = np.zeros_like(distance)
+    
+    # Region 2: Exponential decay from 50 μm to 600 μm
+    exp_mask = (distance > 50) & (distance <= 600)
+    if np.any(exp_mask):
+        lambda_decay = 0.025
+        exp_region = gbar_kca_50um * np.exp(-lambda_decay * (distance - 50))
+        gbar = np.where(exp_mask, exp_region, gbar)
+    
+    # Region 3: Zero beyond 600 μm (already handled by initialization)
+    
+    return gbar
+
+
+def apply_gbar_kca_to_sections(gbar_kca_soma=0.0015, gbar_kca_50um=0.001):
+    """
+    Apply distance-dependent gbar_kca to all sections.
+    
+    Parameters:
+    -----------
+    gbar_kca_soma : float, default=0.0015
+        Conductance at soma (S/cm²)
+    gbar_kca_50um : float, default=0.001
+        Conductance at 50 μm (S/cm²)
+    """
+    # Set distance reference point at soma center
+    h.distance(0, soma(0.5))
+    
+    # Apply to all section lists
+    for sec in somatic_list + apical_list + oblique_list + basal_list:
+        for seg in sec:
+            distance = h.distance(seg.x, sec=sec)
+            seg.gbar_kca = calculate_gbar_kca_distance(distance, gbar_kca_soma, gbar_kca_50um)
+
+
+# Simple application - just call the function
+apply_gbar_kca_to_sections()
+
+# A- type K variation for distal region
+
+def calculate_gkabar_kad(distance, gkabar_min=0.0001, gkabar_100=0.0025, 
+                        gkabar_400=0.0375, gkabar_max=0.0450, 
+                        d_start=100, d_linear=400, d_sat=605):
+    """
+    Calculate A-type K+ (kad) conductance using three-region piecewise function:
+    - Region 1 (0-100 μm): Negligible conductance
+    - Region 2 (100-400 μm): Linear increase  
+    - Region 3 (400+ μm): Exponential saturation
+    
+    Parameters:
+    -----------
+    distance : float or array-like
+        Distance from soma center (μm)
+    gkabar_min : float, default=0.0001
+        Minimal conductance (0-100 μm) (S/cm²)
+    gkabar_100 : float, default=0.0025
+        Conductance at 100 μm (S/cm²)
+    gkabar_400 : float, default=0.0375
+        Conductance at 400 μm (S/cm²)
+    gkabar_max : float, default=0.0450
+        Maximum conductance at saturation (S/cm²)
+    d_start : float, default=100
+        Distance where linear increase begins (μm)
+    d_linear : float, default=400
+        Distance where saturation begins (μm)
+    d_sat : float, default=605
+        Distance where saturation completes (μm)
+    
+    Returns:
+    --------
+    float or array
+        A-type K+ conductance values (S/cm²)
+    """
+    # Convert to array for vectorized operations
+    distance = np.asarray(distance)
+    
+    # Region 1: Negligible conductance (0-100 μm)
+    if np.any(distance <= d_start):
+        gkabar = np.where(distance <= d_start, gkabar_min, 0)
+    else:
+        gkabar = np.zeros_like(distance)
+    
+    # Region 2: Linear increase (100-400 μm)
+    linear_mask = (distance > d_start) & (distance <= d_linear)
+    if np.any(linear_mask):
+        slope = (gkabar_400 - gkabar_100) / (d_linear - d_start)
+        gkabar = np.where(linear_mask, 
+                         gkabar_100 + slope * (distance - d_start), 
+                         gkabar)
+    
+    # Region 3: Exponential saturation (400+ μm)
+    sat_mask = distance > d_linear
+    if np.any(sat_mask):
+        tau = (d_sat - d_linear) / 3  # Time constant
+        sat_factor = 1 - np.exp(-(distance - d_linear) / tau)
+        gkabar = np.where(sat_mask,
+                         gkabar_400 + (gkabar_max - gkabar_400) * sat_factor,
+                         gkabar)
+    
+    return gkabar
+
+# NEURON implementation following your template structure
+for sec in oblique_list:
+    h.distance(0, soma(0.5))
+    for seg in sec:
+        distance = h.distance(seg.x, sec=sec)
+        seg.gkabar_kad = calculate_gkabar_kad(distance)
+
+for sec in apical_list:
+    # Set distance reference point at soma center
+    h.distance(0, soma(0.5))
+    
+    # Apply distance-dependent gkabar_kad to each segment
+    for seg in sec:
+        distance = h.distance(seg.x, sec=sec)  # Distance from soma center to segment
+        seg.gkabar_kad = calculate_gkabar_kad(distance)  # Calculate and assign gkabar_kad
+
+# Ih(hd) channel density along the dendrites (# https://www.jneurosci.org/content/18/19/7613#sec-2)
+
+
+def calculate_gbar_ih_linear(distance, gbar_ih_prox=0.0002, fold_increase=6, d_max=605):
+    """
+    Calculate Ih conductance with linear variation from proximal to distal dendrites.
+    
+    gbar_ih(d) = gbar_ih_prox * (1 + (fold_increase - 1) * d / d_max)
+    
+    Parameters:
+    -----------
+    dist_apical : float or array-like
+        Distance from prox center (μm)
+    gbar_ih_prox : float, default=2e-4
+        Baseline Ih conductance at proximal dendrite (S/cm²)
+    fold_increase : float, default=6
+        Fold increase at distal end (6 means 6x higher)
+    d_max : float, default=605
+        Maximum distance for full fold increase (μm)
+    
+    Returns:
+    --------
+    float or array
+        Ih conductance values (S/cm²)
+    """
+    d_normalized = np.minimum(distance, d_max)
+    return gbar_ih_prox * (1 + (fold_increase - 1) * d_normalized / d_max)
+
+# NEURON setup with integrated linear Ih conductance calculation
+for sec in apical_list + oblique_list + basal_list :
+    # Set distance reference point at soma center
+    h.distance(0, soma(0.5))
+    
+    # Apply linear variation of gbar_ih to each segment
+    for seg in sec:
+        distance = h.distance(seg.x, sec=sec)  # Distance from soma center to segment
+        seg.ghdbar_hd = calculate_gbar_ih_linear(distance)  # Calculate and assign gbar_ih
+#
+
+----------------CA1 pyramidal neuron is built--------------------------
