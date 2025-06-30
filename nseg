@@ -1,0 +1,105 @@
+# Function for the segmentation of the compartments in the model neuron
+
+
+def calculate_length_constants(L, d, Ra, Rm, Cm, f, d_lambda=0.1):
+    """
+    Calculate neuronal length constants and appropriate nseg value
+    
+    Parameters:
+    -----------
+    L : float
+        Section length (in μm)
+    d : float
+        Section diameter (in μm)
+    Ra : float
+        Axial resistivity (in Ω·cm)
+    Rm : float
+        Specific membrane resistance (in Ω·cm²)
+    Cm : float
+        Specific membrane capacitance (in μF/cm²)
+    f : float
+        Frequency of interest (in Hz)
+    d_lambda : float
+        Fraction of the AC length constant for each segment (default: 0.1)
+        
+    Returns:
+    --------
+    Dictionary containing:
+        - lambda_dc: DC length constant (in μm)
+        - lambda_ac: AC length constant at frequency f (in μm)
+        - lambda_f: Section length in units of AC length constant
+        - nseg: Appropriate number of segments for the section
+    """
+    # μm to cm for internal calculations
+    
+    d_cm = d * 1e-4
+    
+    #  DC length constant (in cm, to μm)
+    lambda_dc_cm = np.sqrt((Rm * d_cm) / (4 * Ra))
+    lambda_dc = lambda_dc_cm * 1e4  # Convert to μm
+    
+    # AC length constant
+    denominator = np.sqrt(1 + (2 * np.pi * f * Rm * Cm * 1e-6)**2)
+    lambda_ac = lambda_dc / denominator
+    
+    #  lambda_f (how many length constants fit in the section)
+    lambda_f = L / lambda_ac
+    
+    #  nseg (ensure it's an odd number)
+    nseg = int((lambda_f / d_lambda + 0.9) / 2) * 2 + 1
+    
+    return {
+        "lambda_dc": lambda_dc,
+        "lambda_ac": lambda_ac,
+        "lambda_f": lambda_f,
+        "nseg": nseg
+    }
+
+# Define the sections dictionary
+sections = {
+    "soma": {"length": 10, "diameter": 10.0},
+    "radTprox": {"length": 100, "diameter": 4.0},
+    "radTmed": {"length": 100, "diameter": 3.0},
+    "radTdist": {"length": 200, "diameter": 2.0},
+    "lm_thick1": {"length": 100, "diameter": 2.0},
+    "lm_medium1": {"length": 100, "diameter": 1.5},
+    "lm_thin1a": {"length": 50, "diameter": 1.0},
+    "lm_thin1b": {"length": 50, "diameter": 1.0},
+    "lm_thick2": {"length": 100, "diameter": 2.0},
+    "lm_medium2": {"length": 100, "diameter": 1.5},
+    "lm_thin2a": {"length": 50, "diameter": 1.0},
+    "lm_thin2b": {"length": 50, "diameter": 1.0},
+    "rad_thick1": {"length": 100, "diameter": 2.0},
+    "rad_medium1": {"length": 100, "diameter": 1.5},
+    "rad_thin1a": {"length": 50, "diameter": 1.0},
+    "rad_thin1b": {"length": 50, "diameter": 1.0},
+    "rad_thick2": {"length": 100, "diameter": 2.0},
+    "rad_medium2": {"length": 100, "diameter": 1.5},
+    "rad_thin2a": {"length": 50, "diameter": 1.0},
+    "rad_thin2b": {"length": 50, "diameter": 1.0},
+    "oriprox1": {"length": 100, "diameter": 2.0},
+    "oridist1a": {"length": 100, "diameter": 1.5},
+    "oridist1b": {"length": 100, "diameter": 1.5},
+    "oriprox2": {"length": 100, "diameter": 2.0},
+    "oridist2a": {"length": 100, "diameter": 1.5},
+    "oridist2b": {"length": 100, "diameter": 1.5},
+    "axon": {"length": 150, "diameter": 1.0}
+}
+
+# Initialize biophysical parameters
+Ra = 150      # Axial resistivity in Ω·cm
+Rm = 28000    # Specific membrane resistance in Ω·cm²
+Cm = 1        # Specific membrane capacitance in μF/cm²
+f = 100       # Frequency of interest in Hz
+d_lambda = 0.1  # Fraction of AC length constant per segment
+
+# Calculate and print results for each section
+for section_name, props in sections.items():
+    L = props["length"]
+    d = props["diameter"]
+    results = calculate_length_constants(L, d, Ra, Rm, Cm, f, d_lambda)
+    print(f"\nSection: {section_name}")
+    print(f"  DC Length Constant (lambda_dc): {results['lambda_dc']:.2f} μm")
+    print(f"  AC Length Constant (lambda_ac): {results['lambda_ac']:.2f} μm")
+    print(f"  Section Length in AC Length Constants (lambda_f): {results['lambda_f']:.2f}")
+    print(f"  Recommended Number of Segments (nseg): {results['nseg']}")
