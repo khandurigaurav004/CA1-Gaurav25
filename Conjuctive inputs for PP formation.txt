@@ -1,0 +1,378 @@
+# Conjuctive inputs for plateau potential
+
+# Global list to prevent garbage collection
+all_objects = []
+
+# Simulation parameters
+h.dt = 0.025
+h.tstop = 1500  # Extended to cover all stimulus sets
+h.v_init = -68.55
+
+# Synaptic parameters
+weight_dist = 0.0010
+tau1_ampa = 2
+tau2_ampa = 2.0
+e_ampa = 0
+
+# Set up VecStim with 5 sets of 5 pulses at 100 Hz
+pulse_interval = 1000.0 / 100  # 10 ms for 100 Hz
+set_interval = 200  # ms between sets
+start_time = 200  # ms, initial delay
+num_sets = 5  # 5 sets
+num_pulses_per_set = 5
+
+# Generate spike times
+spike_times = []
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    spike_times.extend([set_start + i * pulse_interval for i in range(num_pulses_per_set)])
+
+print(f"Generated {len(spike_times)} spike times:")
+for i, t in enumerate(spike_times):
+    print(f"Spike {i+1}: {t:.1f} ms")
+
+# Create VecStim
+spike_vec = h.Vector(np.array(spike_times))
+vstim = h.VecStim()
+vstim.play(spike_vec)
+all_objects.extend([spike_vec, vstim])
+
+# Create AMPA synapse at lm_thin1a location
+ampa_syn = h.Exp2Syn(rad_thin1a(0.5))
+ampa_syn.tau1 = tau1_ampa
+ampa_syn.tau2 = tau2_ampa
+ampa_syn.e = e_ampa
+all_objects.append(ampa_syn)
+
+# Create NMDA synapse at lm_thin1a location
+nmda_syn = h.Exp2Syn(rad_thin1a(0.5))
+nmda_syn.tau1 = 10.0    # Slower rise time for NMDA
+nmda_syn.tau2 = 50.0   # Much slower decay for NMDA
+nmda_syn.e = 0
+all_objects.append(nmda_syn)
+
+# Connect VecStim to synapses
+nc_ampa = h.NetCon(vstim, ampa_syn)
+nc_ampa.weight[0] = weight_dist
+nc_ampa.delay = 0
+all_objects.append(nc_ampa)
+
+nc_nmda = h.NetCon(vstim, nmda_syn)
+nc_nmda.weight[0] = weight_dist / 2  # NMDA weight is half of AMPA
+nc_nmda.delay = 0
+all_objects.append(nc_nmda)
+
+# Set up depolarizing current injection at soma
+iclamp = h.IClamp(soma(0.5))
+all_objects.append(iclamp)
+current_amplitude = 0.1  # nA, depolarizing current amplitude
+# Create lists for times and current values
+times = [0.0]  # Start with 0 current at t=0
+currents = [0.0]
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + 40  # 40 ms duration for each stimulus train
+    times.extend([set_start, set_start, set_end, set_end])
+    currents.extend([0.0, current_amplitude, current_amplitude, 0.0])
+times.append(h.tstop)
+currents.append(0.0)
+# Convert to NEURON Vectors
+current_times = h.Vector(times)
+current_vec = h.Vector(currents)
+iclamp.delay = 0
+iclamp.dur = 1e9  # Long duration to cover entire simulation
+iclamp.amp = 0
+current_vec.play(iclamp._ref_amp, current_times, 1)
+all_objects.extend([current_vec, current_times])
+
+# Set up recordings
+v_vec_dend = h.Vector().record(rad_thin1a(0.5)._ref_v)
+i_ampa_vec = h.Vector().record(ampa_syn._ref_i)
+i_nmda_vec = h.Vector().record(nmda_syn._ref_i)
+i_clamp_vec = h.Vector().record(iclamp._ref_i)
+t_vec = h.Vector().record(h._ref_t)
+all_objects.extend([v_vec_dend, i_ampa_vec, i_nmda_vec, i_clamp_vec, t_vec])
+
+# Run simulation
+print("Running simulation...")
+h.run()
+print("Simulation completed.")
+
+# Convert NEURON vectors to numpy arrays for plotting
+time = np.array(t_vec)
+voltage = np.array(v_vec_dend)
+current_ampa = np.array(i_ampa_vec)
+current_nmda = np.array(i_nmda_vec)
+current_clamp = np.array(i_clamp_vec)
+
+# Create figure with 2 subplots
+fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+
+# Plot 1: Membrane voltage at lm_thin1a
+axes[0].plot(time, voltage, 'b-', linewidth=1.5, label='lm_thin1a(0.5)')
+# Add solid black line at y=-72 for stimulus ticks
+axes[0].plot([-50, 1500], [-72, -72], 'k-', linewidth=1)
+# Add stimulus ticks at y=-72
+for spike_time in spike_times:
+    axes[0].plot([spike_time, spike_time], [-72, -68], 'r-', linewidth=1)  # Vertical ticks from y=-72 to y=-68
+# Plot depolarizing current below stimulus ticks as steps
+axes[0].step(time, -74 + current_clamp * 20, 'k-', linewidth=1, where='post')  # Scale 0.1 nA to 2 mV height
+# Add baseline dashed line at y=-68.55
+axes[0].plot([-50, 1500], [-68.55, -68.55], 'k--', linewidth=1)
+axes[0].set_ylabel('Membrane Potential (mV)')
+# Remove spines
+axes[0].spines['top'].set_visible(False)
+axes[0].spines['right'].set_visible(False)
+axes[0].spines['bottom'].set_visible(False)
+axes[0].spines['left'].set_visible(False)
+# Remove ticks and labels
+axes[0].set_xticks([])
+axes[0].set_yticks([])
+axes[0].set_xlabel('')
+axes[0].set_ylabel('')
+
+# Scale bar configuration for first subplot
+scale_bar_config = {
+    'x_pos': 1400,      # X position in data coordinates
+    'y_pos': -30,       # Y position in data coordinates
+    'orientation': 'mirror_L',  # Bottom-right mirrored L
+    'x_length': 20,      # X scale bar length (ms)
+    'y_length': 20,      # Y scale bar length (mV)
+    'linewidth': 1,
+    'color': 'k'
+}
+
+def draw_scale_bars(ax, config):
+    x_pos = config['x_pos']
+    y_pos = config['y_pos']
+    x_len = config['x_length']
+    y_len = config['y_length']
+    orientation = config['orientation']
+    
+    # Define mirror_L orientation
+    x_bar = [x_pos - x_len, x_pos]
+    y_bar_h = [y_pos, y_pos]
+    x_bar_v = [x_pos, x_pos]
+    y_bar_v = [y_pos, y_pos + y_len]
+    x_text_pos = x_pos - x_len/2
+    y_text_pos = y_pos - 2
+    x_label_va = 'top'
+    y_text_pos_v = y_pos + y_len/2
+    x_text_pos_v = x_pos + 10
+    y_label_ha = 'left'
+    
+    # Draw the scale bars
+    ax.plot(x_bar, y_bar_h, color=config['color'], linewidth=config['linewidth'])
+    ax.plot(x_bar_v, y_bar_v, color=config['color'], linewidth=config['linewidth'])
+    
+    # Add labels
+    ax.text(x_text_pos, y_text_pos, f"{config['x_length']} ms", 
+            ha='center', va=x_label_va, fontsize=12)
+    ax.text(x_text_pos_v, y_text_pos_v, f"{config['y_length']} mV", 
+            ha=y_label_ha, va='center', fontsize=12, rotation=90)
+
+# Draw scale bars for first subplot
+draw_scale_bars(axes[0], scale_bar_config)
+
+# # Highlight stimulus periods
+# for set_idx in range(num_sets):
+#     set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+#     set_end = set_start + (num_pulses_per_set - 1) * pulse_interval
+#     axes[0].axvspan(set_start, set_end, alpha=0.1, color='red')
+
+# Plot 2: Synaptic currents
+axes[1].plot(time, current_ampa, 'g-', linewidth=1.5, label='AMPA current')
+axes[1].plot(time, current_nmda, 'r-', linewidth=1.5, label='NMDA current')
+axes[1].plot(time, current_ampa + current_nmda, 'k--', linewidth=1.5, label='Total current')
+axes[1].set_xlabel('Time (ms)')
+axes[1].set_ylabel('Synaptic Current (nA)')
+# Remove spines
+axes[1].spines['top'].set_visible(False)
+axes[1].spines['right'].set_visible(False)
+axes[1].spines['bottom'].set_visible(False)
+axes[1].spines['left'].set_visible(False)
+# Remove ticks and labels
+axes[1].set_xticks([])
+axes[1].set_yticks([])
+axes[1].set_xlabel('')
+axes[1].set_ylabel('')
+axes[1].legend()
+
+# Highlight stimulus periods
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + (num_pulses_per_set - 1) * pulse_interval
+    axes[1].axvspan(set_start, set_end, alpha=0.1, color='red')
+
+# Set x-axis limits for both subplots
+for ax in axes:
+    ax.set_xlim(-50, 1500)
+
+plt.tight_layout()
+plt.show()
+
+# Print summary statistics
+print("\nSummary Statistics:")
+print(f"Simulation duration: {h.tstop} ms")
+print(f"Number of stimulus sets: {num_sets}")
+print(f"Pulses per set: {num_pulses_per_set}")
+print(f"Total spikes: {len(spike_times)}")
+print(f"Resting potential: {voltage[0]:.2f} mV")
+print(f"Maximum voltage: {np.max(voltage):.2f} mV")
+print(f"Minimum voltage: {np.min(voltage):.2f} mV")
+print(f"Maximum AMPA current: {np.min(current_ampa):.4f} nA")  # Min because current is negative
+print(f"Maximum NMDA current: {np.min(current_nmda):.4f} nA")
+print(f"Peak total current: {np.min(current_ampa + current_nmda):.4f} nA")
+
+# Calculate response amplitudes for each set
+print("\nResponse amplitudes for each stimulus set:")
+baseline_voltage = np.mean(voltage[time < start_time])
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + 100  # Look at 100ms window after set start
+    
+    # Find indices for this time window
+    set_mask = (time >= set_start) & (time <= set_end)
+    if np.any(set_mask):
+        max_voltage_in_set = np.max(voltage[set_mask])
+        response_amplitude = max_voltage_in_set - baseline_voltage
+        print(f"Set {set_idx+1}: {response_amplitude:.2f} mV above baseline")
+		
+		
+		
+--------------------
+for publication style figure
+
+
+# Create figure with 2 subplots
+fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+
+# Plot 1: Membrane voltage at lm_thin1a
+axes[0].plot(time, voltage, 'g-', linewidth=1.5, label='lm_thin1a(0.5)')
+# Add solid black line at y=-72 for stimulus ticks
+axes[0].plot([-50, 1500], [-72, -72], 'k-', linewidth=1)
+# Add stimulus ticks at y=-72
+for spike_time in spike_times:
+    axes[0].plot([spike_time, spike_time], [-72, -68], 'r-', linewidth=1)  # Vertical ticks from y=-72 to y=-68
+# Plot depolarizing current below stimulus ticks as steps
+axes[0].step(time, -74 + current_clamp * 20, 'k-', linewidth=1, where='post')  # Scale 0.1 nA to 2 mV height
+# Add baseline dashed line at y=-68.55
+axes[0].plot([-50, 1500], [-68.55, -68.55], 'k--', linewidth=1)
+axes[0].set_ylabel('Membrane Potential (mV)')
+# Remove spines
+axes[0].spines['top'].set_visible(False)
+axes[0].spines['right'].set_visible(False)
+axes[0].spines['bottom'].set_visible(False)
+axes[0].spines['left'].set_visible(False)
+# Remove ticks and labels
+axes[0].set_xticks([])
+axes[0].set_yticks([])
+axes[0].set_xlabel('')
+axes[0].set_ylabel('')
+
+# Scale bar configuration for first subplot
+scale_bar_config = {
+    'x_pos': 1330,      # X position in data coordinates
+    'y_pos': -35,       # Y position in data coordinates
+    'orientation': 'mirror_L',  # Bottom-right mirrored L
+    'x_length': 50,      # X scale bar length (ms)
+    'y_length': 20,      # Y scale bar length (mV)
+    'linewidth': 1,
+    'color': 'k'
+}
+
+def draw_scale_bars(ax, config):
+    x_pos = config['x_pos']
+    y_pos = config['y_pos']
+    x_len = config['x_length']
+    y_len = config['y_length']
+    orientation = config['orientation']
+    
+    # Define mirror_L orientation
+    x_bar = [x_pos - x_len, x_pos]
+    y_bar_h = [y_pos, y_pos]
+    x_bar_v = [x_pos, x_pos]
+    y_bar_v = [y_pos, y_pos + y_len]
+    x_text_pos = x_pos - x_len/2
+    y_text_pos = y_pos - 2
+    x_label_va = 'top'
+    y_text_pos_v = y_pos + y_len/2
+    x_text_pos_v = x_pos + 10
+    y_label_ha = 'left'
+    
+    # Draw the scale bars
+    ax.plot(x_bar, y_bar_h, color=config['color'], linewidth=config['linewidth'])
+    ax.plot(x_bar_v, y_bar_v, color=config['color'], linewidth=config['linewidth'])
+    
+    # Add labels
+    ax.text(x_text_pos, y_text_pos, f"{config['x_length']} ms", 
+            ha='center', va=x_label_va, fontsize=12)
+    ax.text(x_text_pos_v, y_text_pos_v, f"{config['y_length']} mV", 
+            ha=y_label_ha, va='center', fontsize=12, rotation=90)
+
+# Draw scale bars for first subplot
+draw_scale_bars(axes[0], scale_bar_config)
+
+# # Highlight stimulus periods
+# for set_idx in range(num_sets):
+#     set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+#     set_end = set_start + (num_pulses_per_set - 1) * pulse_interval
+#     axes[0].axvspan(set_start, set_end, alpha=0.1, color='red')
+
+# Plot 2: Synaptic currents
+axes[1].plot(time, current_ampa, 'g-', linewidth=1.5, label='AMPA current')
+axes[1].plot(time, current_nmda, 'r-', linewidth=1.5, label='NMDA current')
+axes[1].plot(time, current_ampa + current_nmda, 'k--', linewidth=1.5, label='Total current')
+axes[1].set_xlabel('Time (ms)')
+axes[1].set_ylabel('Synaptic Current (nA)')
+# Remove spines
+axes[1].spines['top'].set_visible(False)
+axes[1].spines['right'].set_visible(False)
+axes[1].spines['bottom'].set_visible(False)
+axes[1].spines['left'].set_visible(False)
+# Remove ticks and labels
+axes[1].set_xticks([])
+axes[1].set_yticks([])
+axes[1].set_xlabel('')
+axes[1].set_ylabel('')
+axes[1].legend()
+
+# Highlight stimulus periods
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + (num_pulses_per_set - 1) * pulse_interval
+    axes[1].axvspan(set_start, set_end, alpha=0.1, color='red')
+
+# Set x-axis limits for both subplots
+for ax in axes:
+    ax.set_xlim(-50, 1500)
+
+plt.tight_layout()
+plt.show()
+
+# Print summary statistics
+print("\nSummary Statistics:")
+print(f"Simulation duration: {h.tstop} ms")
+print(f"Number of stimulus sets: {num_sets}")
+print(f"Pulses per set: {num_pulses_per_set}")
+print(f"Total spikes: {len(spike_times)}")
+print(f"Resting potential: {voltage[0]:.2f} mV")
+print(f"Maximum voltage: {np.max(voltage):.2f} mV")
+print(f"Minimum voltage: {np.min(voltage):.2f} mV")
+print(f"Maximum AMPA current: {np.min(current_ampa):.4f} nA")  # Min because current is negative
+print(f"Maximum NMDA current: {np.min(current_nmda):.4f} nA")
+print(f"Peak total current: {np.min(current_ampa + current_nmda):.4f} nA")
+
+# Calculate response amplitudes for each set
+print("\nResponse amplitudes for each stimulus set:")
+baseline_voltage = np.mean(voltage[time < start_time])
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + 100  # Look at 100ms window after set start
+    
+    # Find indices for this time window
+    set_mask = (time >= set_start) & (time <= set_end)
+    if np.any(set_mask):
+        max_voltage_in_set = np.max(voltage[set_mask])
+        response_amplitude = max_voltage_in_set - baseline_voltage
+        print(f"Set {set_idx+1}: {response_amplitude:.2f} mV above baseline")

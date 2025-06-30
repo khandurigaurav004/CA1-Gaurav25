@@ -1,0 +1,162 @@
+# Plateau Potential at oblique dendrites with spike train
+
+# Global list to prevent garbage collection
+all_objects = []
+
+# Simulation parameters
+h.dt = 0.025
+h.tstop = 1500  # Extended to cover all stimulus sets
+h.v_init = -68.55
+
+# Synaptic parameters (from original code)
+weight_dist = 0.0004
+tau1_ampa = 2
+tau2_ampa = 2.0
+e_ampa = 0
+
+# Set up VecStim with 5 sets of 5 pulses at 100 Hz
+pulse_interval = 1000.0 / 100  # 10 ms for 100 Hz
+set_interval = 200  # ms between sets
+start_time = 200  # ms, initial delay
+num_sets = 5  # 5 sets
+num_pulses_per_set = 5
+
+# Generate spike times
+spike_times = []
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    spike_times.extend([set_start + i * pulse_interval for i in range(num_pulses_per_set)])
+
+print(f"Generated {len(spike_times)} spike times:")
+for i, t in enumerate(spike_times):
+    print(f"Spike {i+1}: {t:.1f} ms")
+
+# Create VecStim
+spike_vec = h.Vector(np.array(spike_times))
+vstim = h.VecStim()
+vstim.play(spike_vec)
+all_objects.extend([spike_vec, vstim])
+
+
+# Create AMPA synapse at lm_thin1a location
+ampa_syn = h.Exp2Syn(rad_thin1a(0.5))
+ampa_syn.tau1 = tau1_ampa
+ampa_syn.tau2 = tau2_ampa
+ampa_syn.e = e_ampa
+all_objects.append(ampa_syn)
+
+# Create NMDA synapse at lm_thin1a location
+# Note: Using a simple Exp2Syn for NMDA if NMDA_CA1_pyr_SC is not available
+nmda_syn = h.Exp2Syn(lm_thin1a(0.5))
+nmda_syn.tau1 = 10.0    # Slower rise time for NMDA
+nmda_syn.tau2 = 50.0   # Much slower decay for NMDA
+nmda_syn.e = 0
+all_objects.append(nmda_syn)
+
+# Connect VecStim to synapses
+nc_ampa = h.NetCon(vstim, ampa_syn)
+nc_ampa.weight[0] = weight_dist
+nc_ampa.delay = 0
+all_objects.append(nc_ampa)
+
+nc_nmda = h.NetCon(vstim, nmda_syn)
+nc_nmda.weight[0] = weight_dist / 2  # NMDA weight is half of AMPA
+nc_nmda.delay = 0
+all_objects.append(nc_nmda)
+
+# Set up recordings
+v_vec_dend = h.Vector().record(lm_thin1a(0.5)._ref_v)
+i_ampa_vec = h.Vector().record(ampa_syn._ref_i)
+i_nmda_vec = h.Vector().record(nmda_syn._ref_i)
+t_vec = h.Vector().record(h._ref_t)
+all_objects.extend([v_vec_dend, i_ampa_vec, i_nmda_vec, t_vec])
+
+# Run simulation
+print("Running simulation...")
+h.run()
+print("Simulation completed.")
+
+# Convert NEURON vectors to numpy arrays for plotting
+time = np.array(t_vec)
+voltage = np.array(v_vec_dend)
+current_ampa = np.array(i_ampa_vec)
+current_nmda = np.array(i_nmda_vec)
+
+# Create figure with 2 subplots
+fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+
+# Plot 1: Membrane voltage at lm_thin1a
+axes[0].plot(time, voltage, 'b-', linewidth=1.5, label='lm_thin1a(0.5)')
+# Add stimulus ticks at y=-70
+for spike_time in spike_times:
+    axes[0].plot([spike_time, spike_time], [-74, -70], 'r-', linewidth=1)  # Vertical ticks from y=-70 to y=-65
+axes[0].set_ylabel('Membrane Potential (mV)')
+# axes[0].set_title('Voltage Response at lm_thin1a')
+# axes[0].grid(True, alpha=0.3)
+# axes[0].legend()
+
+# # Add set markers
+# for set_idx in range(num_sets):
+#     set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+#     axes[0].axvline(set_start, color='blue', linestyle='--', alpha=0.5, label=f'Set {set_idx+1}' if set_idx == 0 else "")
+
+# Highlight stimulus periods
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + (num_pulses_per_set - 1) * pulse_interval
+    axes[0].axvspan(set_start, set_end, alpha=0.1, color='red')
+
+# Plot 2: Synaptic currents
+axes[1].plot(time, current_ampa, 'g-', linewidth=1.5, label='AMPA current')
+axes[1].plot(time, current_nmda, 'r-', linewidth=1.5, label='NMDA current')
+axes[1].plot(time, current_ampa + current_nmda, 'k--', linewidth=1.5, label='Total current')
+axes[1].set_xlabel('Time (ms)')
+axes[1].set_ylabel('Synaptic Current (nA)')
+# axes[1].set_title('Synaptic Currents at lm_thin1a')
+# axes[1].grid(True, alpha=0.3)
+axes[1].legend()
+
+# Highlight stimulus periods
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + (num_pulses_per_set - 1) * pulse_interval
+    axes[1].axvspan(set_start, set_end, alpha=0.1, color='red')
+
+# Set x-axis limits for both subplots
+for ax in axes:
+    ax.tick_params(axis='both', labelsize=14)
+    ax.xaxis.label.set_fontsize(14)
+    ax.yaxis.label.set_fontsize(14)
+    ax.xaxis.label.set_fontweight('bold')
+    ax.yaxis.label.set_fontweight('bold')
+    ax.set_xlim(-50, 1500)
+
+plt.tight_layout()
+plt.show()
+
+# Print summary statistics
+print("\nSummary Statistics:")
+print(f"Simulation duration: {h.tstop} ms")
+print(f"Number of stimulus sets: {num_sets}")
+print(f"Pulses per set: {num_pulses_per_set}")
+print(f"Total spikes: {len(spike_times)}")
+print(f"Resting potential: {voltage[0]:.2f} mV")
+print(f"Maximum voltage: {np.max(voltage):.2f} mV")
+print(f"Minimum voltage: {np.min(voltage):.2f} mV")
+print(f"Maximum AMPA current: {np.min(current_ampa):.4f} nA")  # Min because current is negative
+print(f"Maximum NMDA current: {np.min(current_nmda):.4f} nA")
+print(f"Peak total current: {np.min(current_ampa + current_nmda):.4f} nA")
+
+# Calculate response amplitudes for each set
+print("\nResponse amplitudes for each stimulus set:")
+baseline_voltage = np.mean(voltage[time < start_time])
+for set_idx in range(num_sets):
+    set_start = start_time + set_idx * (set_interval + num_pulses_per_set * pulse_interval)
+    set_end = set_start + 100  # Look at 100ms window after set start
+    
+    # Find indices for this time window
+    set_mask = (time >= set_start) & (time <= set_end)
+    if np.any(set_mask):
+        max_voltage_in_set = np.max(voltage[set_mask])
+        response_amplitude = max_voltage_in_set - baseline_voltage
+        print(f"Set {set_idx+1}: {response_amplitude:.2f} mV above baseline")

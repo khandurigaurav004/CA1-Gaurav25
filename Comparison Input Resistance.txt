@@ -1,0 +1,62 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Data
+locations = ['Soma', 'radTprox', 'radTdist', 'rad_thin1a', 'lm_thin1a']
+resistance = [69.25, 58.13, 50.53, 178.90, 250.13]  # in MΩ
+distances = [0, 55, 305, 330, 625]  # in μm
+# Color codes for easy customization
+colors = ['#FFA500',  # orange
+          "#027402",  # darkgreen
+          "#72B17F",  # lightgreen
+          "#A864A8",  # plum (light purple)
+          "#AFFBAF"]  # palegreen (lighter green)
+
+# Create the bar plot with reduced width
+fig, ax = plt.subplots(figsize=(8, 6))
+
+bars = ax.bar(locations, resistance, color=colors, edgecolor='black', linewidth=0.8, width=0.5)
+
+# Customize the plot
+ax.set_ylabel('Input Resistance (MΩ)', fontsize=14)
+# ax.set_title('Input Resistance vs Distance from Soma', fontsize=14, fontweight='bold')
+
+# Remove top and right spines, make remaining spines bold
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.spines['left'].set_linewidth(2)
+ax.spines['bottom'].set_linewidth(2)
+
+# Set tick font sizes
+ax.tick_params(axis='both', which='major', labelsize=14)
+
+# Add value labels on top of each bar
+for i, (bar, val, dist) in enumerate(zip(bars, resistance, distances)):
+    height = bar.get_height()
+    ax.text(bar.get_x() + bar.get_width()/2., height + 3,
+            f'{val} MΩ\n({dist} μm)', 
+            ha='center', va='bottom', fontsize=8)
+
+# # Add grid for better readability
+# ax.grid(axis='y', alpha=0.3, linestyle='--')
+# ax.set_axisbelow(True)
+
+# Set y-axis to start from 0 and add some padding at the top
+ax.set_ylim(0, max(resistance) * 1.15)
+
+# Rotate x-axis labels for better readability
+plt.xticks(rotation=45, ha='right')
+
+# Adjust layout to prevent label cutoff
+plt.tight_layout()
+
+# Display the plot
+plt.show()
+
+# Print summary statistics
+print("Summary Statistics:")
+print("-" * 30)
+for loc, res, dist in zip(locations, resistance, distances):
+    print(f"{loc}: {res} MΩ at {dist} μm from soma")
+print(f"\nRange: {min(resistance)} - {max(resistance)} MΩ")
+print(f"Mean resistance: {np.mean(resistance):.2f} MΩ")

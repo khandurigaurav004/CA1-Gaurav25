@@ -1,0 +1,73 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Data
+locations = ['Soma', 'radTdist', 'rad_thin1a', 'lm_thin1a']
+membrane_potential = [-68.55, -66.77, -67.46, -60.61]  # in mV
+distances = [0, 305, 330, 625]  # in μm
+# Color codes for easy customization (matching your reference)
+colors = ['#FFA500',  # orange (Soma)
+          "#72B17F",  # lightgreen (radTdist)
+          "#A864A8",  # plum (light purple) (rad_thin1a)
+          "#AFFBAF"]  # palegreen (lighter green) (lm_thin1a)
+
+# Create the bar plot with reduced width
+fig, ax = plt.subplots(figsize=(8, 6))
+
+bars = ax.bar(locations, membrane_potential, color=colors, edgecolor='black', linewidth=0.8, width=0.5)
+
+# Customize the plot
+ax.set_ylabel('Resting Membrane Potential (mV)', fontsize=14)
+# ax.set_title('Resting Membrane Potential vs Distance from Soma', fontsize=14, fontweight='bold')
+
+# Remove top, right and bottom spines, make remaining spines bold
+ax.spines['top'].set_linewidth(2)
+ax.spines['right'].set_visible(False)
+ax.spines['bottom'].set_visible(False)
+ax.spines['left'].set_linewidth(2)
+
+# Set tick font sizes and remove x-axis labels
+ax.tick_params(axis='both', which='major', labelsize=14)
+ax.tick_params(axis='x', which='major', top=False, bottom=False, labeltop=False, labelbottom=False)
+
+# Add value labels on top of each bar (adjusted for negative values)
+for i, (bar, val, dist) in enumerate(zip(bars, membrane_potential, distances)):
+    height = bar.get_height()
+    # For negative values, place text above the bar
+    ax.text(bar.get_x() + bar.get_width()/2., height + 0.5,
+            f'{val} mV\n({dist} μm)', 
+            ha='center', va='bottom', fontsize=8)
+
+# Set y-axis limits appropriately for negative values
+y_min = min(membrane_potential) - 2
+y_max = max(membrane_potential) + 3
+ax.set_ylim(y_min, y_max)
+
+# X-axis labels removed
+
+# Adjust layout to prevent label cutoff
+plt.tight_layout()
+
+# Display the plot
+plt.show()
+
+# Print summary statistics
+print("Summary Statistics:")
+print("-" * 30)
+for loc, mp, dist in zip(locations, membrane_potential, distances):
+    print(f"{loc}: {mp} mV at {dist} μm from soma")
+print(f"\nRange: {min(membrane_potential)} - {max(membrane_potential)} mV")
+print(f"Mean membrane potential: {np.mean(membrane_potential):.2f} mV")
+
+
+-------==============
+
+Summary Statistics:
+------------------------------
+Soma: -68.55 mV at 0 μm from soma
+radTdist: -66.77 mV at 305 μm from soma
+rad_thin1a: -67.46 mV at 330 μm from soma
+lm_thin1a: -60.61 mV at 625 μm from soma
+
+Range: -68.55 - -60.61 mV
+Mean membrane potential: -65.85 mV
