@@ -1,0 +1,170 @@
+# Input Resistance calculations
+
+# Setup current injection
+iclamp = h.IClamp(soma(0.5))
+iclamp.delay = 100  # Start injection at 100ms
+iclamp.dur = 400    # Duration matches analysis window (100-500ms)
+
+# Setup recording
+v_vec = h.Vector()
+t_vec = h.Vector()
+v_vec.record(soma(0.5)._ref_v)
+t_vec.record(h._ref_t)
+
+# Define current range and initialize results
+currents = np.linspace(-0.020, 0.050, 7)  #50
+voltages = []
+
+print("Current (nA) | Peak Voltage (mV)")
+print("-" * 30)
+
+# Run simulations
+for current in currents:
+    # Set current amplitude
+    iclamp.amp = current
+    
+    # Run simulation
+    h.finitialize(-65)
+    h.tstop = 500
+    h.run()
+    
+    # Convert vectors to arrays once per simulation
+    time = np.array(t_vec)
+    voltage = np.array(v_vec)
+    
+    # Find peak during current injection (100-500ms)
+    injection_mask = (time >= 100) & (time <= 500)
+    peak_voltage = np.max(voltage[injection_mask])
+    voltages.append(peak_voltage)
+    
+    print(f"{current:8.3f}  | {peak_voltage:12.2f}")
+
+# Convert voltages to array (currents already is numpy array)
+voltages = np.array(voltages)
+
+# Calculate input resistance from I-V relationship
+slope, intercept, r_value, p_value, std_err = stats.linregress(currents, voltages)
+
+print(f"\nInput Resistance: {slope:.2f} MΩ")
+print(f"R-squared: {r_value**2:.4f}")
+
+# Plot I-V relationship
+plt.figure(figsize=(10, 6))
+plt.scatter(currents, voltages, color='blue', s=100, label='Data points')
+plt.plot(currents, slope * currents + intercept, 'r--', 
+         label=f'Linear fit: R = {slope:.2f} MΩ')
+plt.xlabel('Injected Current (nA)')
+plt.ylabel('Peak Voltage (mV)')
+plt.title('Input Resistance Measurement')
+# plt.grid(True, alpha=0.3)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+# Plot last a few values of voltages vs currents and linear fit
+last_n = 6
+x = currents[-last_n:]
+y = voltages[-last_n:]
+
+# Linear fit
+slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+input_resistance = slope  # in MΩ
+
+plt.figure(figsize=(8, 5))
+plt.plot(x, y, 'o', color='blue')
+plt.plot(x, slope * x + intercept, 'r--', label=f'R = {slope:.2f} MΩ\nR-squared: {r_value**2:.4f}')
+plt.xlabel('Injected Current (nA)')
+plt.ylabel('Peak Voltage (mV)')
+plt.title('Input Resistance of soma')
+plt.legend()
+# plt.grid(True, alpha=0.3)
+plt.show()
+
+print(f"Slope (Input Resistance): {slope:.2f} MΩ")
+
+
+
+
+
+
+iclamp = h.IClamp(soma(0.5))
+iclamp.delay = 100
+iclamp.dur = 500
+
+# Setup recording
+v_vec = h.Vector()
+t_vec = h.Vector()fi
+v_vec.record(soma(0.5)._ref_v)
+t_vec.record(h._ref_t)
+
+
+currents = np.linspace(-0.025, 0.09, 10)
+voltages = []
+
+print("Current (nA) | Peak Voltage (mV)")
+print("-" * 30)
+
+# Run simulations
+for i in range(len(currents)):
+    # Set current
+    iclamp.amp = currents[i]
+    iclamp.delay = 100
+    
+    # Run simulation
+    h.finitialize(-68.59)  # Initial membrane potential
+    h.tstop = 500
+    h.run()
+    
+
+    time = np.array(t_vec)
+    voltage = np.array(v_vec)
+    
+    # Find peak during current injection
+    mask = (time >= 100) & (time <= 500)
+    peak_voltage = np.max(voltage[mask])
+    voltages.append(peak_voltage)
+    
+    print(f"{currents[i]:8.3f}  | {peak_voltage:12.2f}")
+
+# Convert to arrays
+currents = np.array(currents)
+voltages = np.array(voltages)
+
+from scipy import stats
+# Calculate slope (input resistance)
+slope, intercept, r_value, p_value, std_err = stats.linregress(currents, voltages)
+
+print(f"\nInput Resistance: {slope:.2f} MΩ")
+print(f"R-squared: {r_value**2:.4f}")
+
+# Plot results
+plt.figure(figsize=(10, 6))
+plt.scatter(currents, voltages, color='blue', s=100, label='Data')
+plt.plot(currents, slope * currents + intercept, 'r--', 
+         label=f'Fit: R = {slope:.2f} MΩ')
+plt.xlabel('Current (nA)')
+plt.ylabel('Peak Voltage (mV)')
+plt.title('Input Resistance Measurement')
+# plt.grid(True)
+plt.legend()
+plt.show()
+
+
+--------------------------------------------------------------------------------------------------------------------
+
+Current (nA) | Peak Voltage (mV)
+------------------------------
+  -0.025  |       -68.74
+  -0.012  |       -68.74
+   0.001  |       -68.56
+   0.013  |       -67.67
+   0.026  |       -66.69
+   0.039  |       -65.68
+   0.052  |       -64.62
+   0.064  |       -63.48
+   0.077  |       -62.16
+   0.090  |       -59.96
+
+Input Resistance: 76.20 MΩ
+R-squared: 0.9416
