@@ -1,0 +1,288 @@
+from scipy.signal import find_peaks
+import numpy as np
+import matplotlib.pyplot as plt
+
+def analyze_action_potential(soma, amp=0.2, delay=100, dur=1000, rmp_v=-68.55, 
+                           tstop=None, plot=True, show_annotations=False, 
+                           spine_width=2.5, hide_top_right_spines=True,
+                           add_scale_bar=True, scale_bar_params=None):
+    """
+    Analyze action potential properties with current clamp stimulation.
+    
+    Parameters:
+    -----------
+    soma : NEURON section
+        The soma section to stimulate and record from
+    amp : float
+        Current clamp amplitude in nA
+    delay : float
+        Delay before stimulus starts in ms
+    dur : float
+        Duration of stimulus in ms
+    rmp_v : float
+        Resting membrane potential in mV
+    tstop : float
+        Total simulation time in ms (if None, uses delay + dur + 100)
+    plot : bool
+        Whether to plot the results
+    spine_width : float
+        Width of plot spines (set to None to keep default)
+    hide_top_right_spines : bool
+        Whether to hide top and right spines for cleaner look
+    add_scale_bar : bool
+        Whether to add publication-style scale bars
+    scale_bar_params : dict
+        Custom scale bar parameters (x_scale, y_scale, position, etc.)
+    
+    Returns:
+    --------
+    dict : Analysis results containing time, voltage, peak info, and AP properties
+    """
+    
+    # Create IClamp (local to this function)
+    iclamp = h.IClamp(soma(0.5))
+    iclamp.delay = delay
+    iclamp.amp = amp
+    iclamp.dur = dur
+    
+    # Record vectors
+    v_soma = h.Vector().record(soma(0.5)._ref_v)
+    t_vec = h.Vector().record(h._ref_t)
+    
+    # Set simulation parameters
+    h.v_init = rmp_v
+    h.tstop = tstop if tstop else (delay + dur + 100)
+    
+    # Run simulation
+    h.run()
+    
+    # Convert NEURON vectors to numpy arrays
+    voltage = np.array(v_soma)
+    time = np.array(t_vec)
+    
+    # Find action potential peaks
+    threshold = rmp_v + 20  # 20 mV above resting potential
+    peaks, properties = find_peaks(voltage, 
+                                  height=threshold,
+                                  distance=50,
+                                  prominence=30)
+    
+    # Initialize results dictionary
+    results = {
+        'time': time,
+        'voltage': voltage,
+        'rmp': rmp_v,
+        'threshold': threshold,
+        'stimulus_amp': amp,
+        'stimulus_delay': delay,
+        'stimulus_duration': dur
+    }
+    
+    if len(peaks) > 0:
+        # Get the maximum peak
+        max_peak_idx = peaks[np.argmax(voltage[peaks])]
+        peak_voltage = voltage[max_peak_idx]
+        peak_time = time[max_peak_idx]
+        
+        # Calculate action potential amplitude
+        ap_amplitude = peak_voltage - rmp_v
+        
+        # Add AP properties to results
+        results.update({
+            'peaks_detected': len(peaks),
+            'peak_indices': peaks,
+            'max_peak_voltage': peak_voltage,
+            'max_peak_time': peak_time,
+            'ap_amplitude': ap_amplitude,
+            'all_peak_voltages': voltage[peaks],
+            'all_peak_times': time[peaks]
+        })
+        
+        # Print results
+        print(f"Resting membrane potential: {rmp_v:.2f} mV")
+        print(f"Peak voltage: {peak_voltage:.2f} mV")
+        print(f"Action potential amplitude: {ap_amplitude:.2f} mV")
+        print(f"Peak time: {peak_time:.2f} ms")
+        print(f"Number of action potentials detected: {len(peaks)}")
+        
+        if plot:
+            plt.figure(figsize=(12, 6))
+            ax = plt.gca()  # Get current axes
+            plt.plot(time, voltage, 'g-', linewidth=1.5, label='Membrane potential')
+            
+            if show_annotations:
+                # Mark all detected peaks
+                plt.plot(time[peaks], voltage[peaks], 'ro', markersize=8, label='AP peaks')
+                
+                # Highlight the maximum peak
+                plt.plot(peak_time, peak_voltage, 'go', markersize=10, label='Max peak')
+                
+                # Add horizontal lines for reference
+                plt.axhline(y=rmp_v, color='gray', linestyle='--', alpha=0.7, 
+                           label=f'RMP ({rmp_v:.1f} mV)')
+                plt.axhline(y=threshold, color='orange', linestyle='--', alpha=0.7, 
+                           label=f'Threshold ({threshold:.1f} mV)')
+                
+                # Add amplitude annotation
+                plt.annotate('', xy=(peak_time, peak_voltage), xytext=(peak_time, rmp_v),
+                            arrowprops=dict(arrowstyle='<->', color='red', lw=2))
+                plt.text(peak_time + 50, (peak_voltage + rmp_v)/2, 
+                        f'Amplitude\n{ap_amplitude:.1f} mV', 
+                        fontsize=12, color='red', ha='left', va='center',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+            
+            # Customize spines
+            if spine_width is not None:
+                for spine in ax.spines.values():
+                    spine.set_linewidth(spine_width)
+            
+            if hide_top_right_spines:
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+            
+            # Add scale bars if requested
+            if add_scale_bar:
+                _add_scale_bars(ax, time, voltage, scale_bar_params)
+            else:
+                plt.ylabel('Voltage (mV)', fontsize=12, fontweight='bold')
+                plt.xlabel('Time (ms)', fontsize=12, fontweight='bold')
+            
+            plt.title(f'Action Potential Analysis (I = {amp} nA)')
+            plt.tick_params(axis='both', which='major', labelsize=12)
+            if not add_scale_bar:
+                plt.legend()
+            if show_annotations:
+                plt.grid(True, alpha=0.3)
+            plt.show()
+            
+    else:
+        max_voltage = max(voltage)
+        results.update({
+            'peaks_detected': 0,
+            'max_voltage_reached': max_voltage,
+            'ap_amplitude': None
+        })
+        
+        print("No action potentials detected!")
+        print(f"Maximum voltage reached: {max_voltage:.2f} mV")
+        print("Try increasing the stimulus amplitude or check the cell parameters.")
+        
+        if plot:
+            plt.figure(figsize=(12, 4))
+            ax = plt.gca()  # Get current axes
+            plt.plot(time, voltage, 'g-', linewidth=1.5, label='Membrane potential')
+            if show_annotations:
+                plt.axhline(y=rmp_v, color='gray', linestyle='--', alpha=0.7, 
+                           label=f'RMP ({rmp_v:.1f} mV)')
+            
+            # Customize spines
+            if spine_width is not None:
+                for spine in ax.spines.values():
+                    spine.set_linewidth(spine_width)
+            
+            if hide_top_right_spines:
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+            
+            # Add scale bars if requested
+            if add_scale_bar:
+                _add_scale_bars(ax, time, voltage, scale_bar_params)
+            else:
+                plt.ylabel('Voltage (mV)', fontsize=12, fontweight='bold')
+                plt.xlabel('Time (ms)', fontsize=12, fontweight='bold')
+            
+            # plt.title(f'Membrane Potential (No APs detected, I = {amp} nA)')
+            plt.tick_params(axis='both', which='major', labelsize=12)
+            # if not add_scale_bar:
+            #     plt.legend()
+            plt.show()
+    
+    # Clean up the IClamp (automatic when function exits)
+    iclamp = None
+    
+    return results
+
+def _add_scale_bars(ax, time, voltage, scale_bar_params=None):
+    """
+    Add publication-style scale bars to the plot.
+    
+    Parameters:
+    -----------
+    ax : matplotlib axes
+        The axes to add scale bars to
+    time : array
+        Time data for determining appropriate scales
+    voltage : array
+        Voltage data for determining appropriate scales
+    scale_bar_params : dict
+        Custom parameters for scale bars
+    """
+    # Default scale bar parameters
+    default_params = {
+        'x_scale': 100,    # ms
+        'y_scale': 20,     # mV
+        'position': 'bottom_right',  # 'bottom_right', 'bottom_left', 'top_right', 'top_left'
+        'offset_x': 0.05,  # fraction of axis width from edge
+        'offset_y': 0.05,  # fraction of axis height from edge
+        'linewidth': 2,
+        'color': 'black',
+        'fontsize': 12,
+        'fontweight': 'bold'
+    }
+    
+    if scale_bar_params:
+        default_params.update(scale_bar_params)
+    
+    params = default_params
+    
+    # Get axis limits
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    
+    # Calculate position based on specified corner
+    x_range = xlim[1] - xlim[0]
+    y_range = ylim[1] - ylim[0]
+    
+    if params['position'] == 'bottom_right':
+        x_start = xlim[1] - params['offset_x'] * x_range - params['x_scale']
+        y_start = ylim[0] + params['offset_y'] * y_range
+    elif params['position'] == 'bottom_left':
+        x_start = xlim[0] + params['offset_x'] * x_range
+        y_start = ylim[0] + params['offset_y'] * y_range
+    elif params['position'] == 'top_right':
+        x_start = xlim[1] - params['offset_x'] * x_range - params['x_scale']
+        y_start = ylim[1] - params['offset_y'] * y_range - params['y_scale']
+    else:  # top_left
+        x_start = xlim[0] + params['offset_x'] * x_range
+        y_start = ylim[1] - params['offset_y'] * y_range - params['y_scale']
+    
+    # Draw horizontal scale bar (time)
+    ax.plot([x_start, x_start + params['x_scale']], [y_start, y_start], 
+            linewidth=params['linewidth'], color=params['color'], clip_on=False)
+    
+    # Draw vertical scale bar (voltage)
+    ax.plot([x_start, x_start], [y_start, y_start + params['y_scale']], 
+            linewidth=params['linewidth'], color=params['color'], clip_on=False)
+    
+    # Add labels
+    # Time label (below horizontal bar)
+    ax.text(x_start + params['x_scale']/2, y_start - 0.02 * y_range, 
+            f"{params['x_scale']} ms", 
+            ha='center', va='top', fontsize=params['fontsize'], 
+            fontweight=params['fontweight'], clip_on=False)
+    
+    # Voltage label (left of vertical bar)
+    ax.text(x_start - 0.01 * x_range, y_start + params['y_scale']/2, 
+            f"{params['y_scale']} mV", 
+            ha='right', va='center', fontsize=params['fontsize'], 
+            fontweight=params['fontweight'], rotation=90, clip_on=False)
+    
+    # Remove axis labels and ticks when using scale bars
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    
+    # Remove remaining spines if not already done
+    for spine in ax.spines.values():
+        spine.set_visible(False)
