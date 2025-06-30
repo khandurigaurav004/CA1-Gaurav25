@@ -1,0 +1,184 @@
+# Create recording vectors 
+v_soma = h.Vector()
+v_radTmed1 = h.Vector()
+v_radTmed2 = h.Vector()
+v_radTmed3 = h.Vector()
+v_radTmed4 = h.Vector()
+v_radTmed5 = h.Vector()
+v_radTdist1 = h.Vector()
+v_radTdist2 = h.Vector()
+v_radTdist3 = h.Vector()
+# v_radTdist4 = h.Vector()
+# v_radTdist5 = h.Vector()
+# v_radTdist6 = h.Vector()
+t = h.Vector() 
+
+# Record voltage from the middle of each section (0.5)
+v_soma.record(soma(0.5)._ref_v)
+v_radTmed1.record(radTmed(0.1)._ref_v)
+v_radTmed2.record(radTmed(0.3)._ref_v)
+v_radTmed3.record(radTmed(0.5)._ref_v)
+v_radTmed4.record(radTmed(0.7)._ref_v)
+v_radTmed5.record(radTmed(0.9)._ref_v)
+v_radTdist1.record(radTdist(0.1)._ref_v)
+v_radTdist2.record(radTdist(0.3)._ref_v)
+v_radTdist3.record(radTdist(0.4)._ref_v)
+# v_radTdist4.record(radTdist(0.7)._ref_v)
+# v_radTdist5.record(radTdist(0.8)._ref_v)
+# v_radTdist6.record(radTdist(0.95)._ref_v)
+
+t.record(h._ref_t)
+
+# Create stimulus 
+stim = h.IClamp(soma(0.5))
+stim.delay = 50   # Start after 50 ms
+stim.dur = 20     # Duration of 20 ms
+stim.amp = 0.2    # Amplitude of 0.2 nA
+
+# Set simulation parameters
+h.dt = 0.025      # Integration time step in ms
+h.tstop = 150     # Stop simulation after 150 ms
+h.v_init = -68.6  # Initialize voltage at V_rmp
+h.run()
+
+# Extract peak voltages
+peak_soma = max(v_soma)
+peak_radTmed1 = max(v_radTmed1)
+peak_radTmed2 = max(v_radTmed2)
+peak_radTmed3 = max(v_radTmed3)
+peak_radTmed4 = max(v_radTmed4)
+peak_radTmed5 = max(v_radTmed5)
+peak_radTdist1 = max(v_radTdist1)
+peak_radTdist2 = max(v_radTdist2)
+peak_radTdist3 = max(v_radTdist3)
+# peak_radTdist4 = max(v_radTdist4)
+# peak_radTdist5 = max(v_radTdist5)
+# peak_radTdist6 = max(v_radTdist6)
+
+# Set soma(0.5) as the origin for distance measurements
+h.distance(0, soma(0.5))
+
+# Calculate distances to each recording location
+distances = []
+peak_voltages = []
+location_names = []
+
+# Soma
+# distances.append(h.distance(soma(0.5)))
+# peak_voltages.append(peak_soma)
+# location_names.append("soma(0.5)")
+
+# radTmed locations
+distances.append(h.distance(radTmed(0.1)))
+peak_voltages.append(peak_radTmed1)
+location_names.append("radTmed(0.2)")
+
+distances.append(h.distance(radTmed(0.3)))
+peak_voltages.append(peak_radTmed2)
+location_names.append("radTmed(0.4)")
+
+distances.append(h.distance(radTmed(0.5)))
+peak_voltages.append(peak_radTmed3)
+location_names.append("radTmed(0.5)")
+
+distances.append(h.distance(radTmed(0.7)))
+peak_voltages.append(peak_radTmed4)
+location_names.append("radTmed(0.6)")
+
+distances.append(h.distance(radTmed(0.9)))
+peak_voltages.append(peak_radTmed5)
+location_names.append("radTmed(0.8)")
+
+# radTdist locations
+distances.append(h.distance(radTdist(0.1)))
+peak_voltages.append(peak_radTdist1)
+location_names.append("radTdist(0.2)")
+
+distances.append(h.distance(radTdist(0.3)))
+peak_voltages.append(peak_radTdist2)
+location_names.append("radTdist(0.4)")
+
+distances.append(h.distance(radTdist(0.4)))
+peak_voltages.append(peak_radTdist3)
+location_names.append("radTdist(0.5)")
+
+# distances.append(h.distance(radTdist(0.6)))
+# peak_voltages.append(peak_radTdist4)
+# location_names.append("radTdist(0.6)")
+
+# distances.append(h.distance(radTdist(0.8)))
+# peak_voltages.append(peak_radTdist5)
+# location_names.append("radTdist(0.8)")
+
+# distances.append(h.distance(radTdist(0.95)))
+# peak_voltages.append(peak_radTdist6)
+# location_names.append("radTdist(0.95)")
+
+# Print peak voltages and distances
+print("Peak voltages at different locations:")
+for i, location in enumerate(location_names):
+    print(f"{location}: {peak_voltages[i]:.2f} mV at distance {distances[i]:.1f} μm")
+
+from scipy import stats
+
+plt.figure(figsize=(10, 6))
+plt.scatter(distances, peak_voltages, marker='o', s=50, color='blue', edgecolor='black', alpha=0.7)
+
+# Convert lists to numpy arrays for the linear regression
+distances_array = np.array(distances)
+peak_voltages_array = np.array(peak_voltages)
+
+# Calculate the linear regression
+slope, intercept, r_value, p_value, std_err = stats.linregress(distances_array, peak_voltages_array)
+r_squared = r_value**2
+
+# Create line of best fit
+x_line = np.linspace(min(distances_array), max(distances_array), 100)
+y_line = slope * x_line + intercept
+
+# Plot the linear fit
+plt.plot(x_line, y_line, 'r--',linewidth=2, 
+         label=f'Linear fit: y = {slope:.4f}x + {intercept:.2f}\nR² = {r_squared:.4f}')
+
+# # Add annotation with slope and R² values
+# plt.annotate(f'Slope: {slope:.4f} mV/μm\nR²: {r_squared:.4f}', 
+#              xy=(0.05, 0.95), xycoords='axes fraction',
+#              bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8))
+# # Optionally add labels for each point
+# for i, txt in enumerate(location_names):
+#     plt.annotate(txt, (distances[i], peak_voltages[i]), textcoords="offset points", 
+#                  xytext=(0,10), ha='center', fontsize=8)
+
+plt.xlabel('Distance from Soma (μm)')
+plt.ylabel('Peak Membrane Potential (mV)')
+plt.title('Peak Voltage vs Distance from Soma')
+# plt.legend(loc='upper right')
+
+# Print slope and R² value
+print(f"Linear fit results:")
+print(f"Slope: {slope:.6f} mV/μm")
+print(f"Intercept: {intercept:.6f} mV")
+print(f"R-squared: {r_squared:.6f}")
+print(f"p-value: {p_value:.6f}")
+print(f"Standard error: {std_err:.6f}")
+
+plt.tight_layout()
+plt.savefig('Peak_Membrane_Potential_vs_dis_linear_fit.png',dpi=300)
+plt.show()
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Peak voltages at different locations:
+radTmed(0.2): 40.53 mV at distance 115.0 μm
+radTmed(0.4): 40.25 mV at distance 135.0 μm
+radTmed(0.5): 40.01 mV at distance 155.0 μm
+radTmed(0.6): 39.77 mV at distance 175.0 μm
+radTmed(0.8): 39.56 mV at distance 195.0 μm
+radTdist(0.2): 38.89 mV at distance 212.9 μm
+radTdist(0.4): 38.17 mV at distance 233.9 μm
+radTdist(0.5): 38.13 mV at distance 244.5 μm
+Linear fit results:
+Slope: -0.019196 mV/μm
+Intercept: 42.931923 mV
+R-squared: 0.947365
+p-value: 0.000046
+Standard error: 0.001847
