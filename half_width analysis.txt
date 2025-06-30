@@ -1,0 +1,215 @@
+# Create stimulus
+stim_s = h.IClamp(soma(0.5))  # at middle of soma
+stim_s.delay = 100
+stim_s.dur = 1000
+stim_s.amp = 0.2
+
+# Create recording vectors
+v_soma = h.Vector()
+t_vec = h.Vector()
+
+# Set up recordings
+v_soma.record(soma(0.5)._ref_v)  # from middle of soma
+t_vec.record(h._ref_t)
+
+# Set initial voltage
+h.v_init = -68.60  # initial membrane potential
+h.tstop = 1300     # simulation duration
+h.run()            # run simulation
+
+# Convert NEURON Vector objects to Python lists, then to NumPy arrays
+import numpy as np
+v_soma_array = np.array(v_soma.to_python())
+t_vec_array = np.array(t_vec.to_python())
+
+# Function to calculate half-width of an action potential
+def calculate_half_width(times, voltages, peak_index, baseline):
+    """
+    Calculate the width of an action potential at half-maximum amplitude.
+    
+    Parameters:
+    - times: array of time points
+    - voltages: array of voltage values
+    - peak_index: index of the action potential peak
+    - baseline: baseline voltage level
+    
+    Returns:
+    - half_width: width of the action potential at half-maximum (in ms)
+    - half_max_voltage: the voltage at half-maximum
+    - left_index: index where voltage crosses half-max on rising phase
+    - right_index: index where voltage crosses half-max on falling phase
+    """
+    peak_voltage = voltages[peak_index]
+    half_max_voltage = baseline + (peak_voltage - baseline) / 2
+    
+    # Find the indices where voltage crosses half-max
+    left_index = peak_index
+    while left_index > 0 and voltages[left_index] > half_max_voltage:
+        left_index -= 1
+    
+    right_index = peak_index
+    while right_index < len(voltages) - 1 and voltages[right_index] > half_max_voltage:
+        right_index += 1
+    
+    # Linear interpolation for more accurate half-width
+    if left_index > 0:
+        left_time = times[left_index] + (times[left_index+1] - times[left_index]) * \
+                   (half_max_voltage - voltages[left_index]) / \
+                   (voltages[left_index+1] - voltages[left_index])
+    else:
+        left_time = times[left_index]
+    
+    if right_index < len(voltages) - 1:
+        right_time = times[right_index-1] + (times[right_index] - times[right_index-1]) * \
+                    (half_max_voltage - voltages[right_index-1]) / \
+                    (voltages[right_index] - voltages[right_index-1])
+    else:
+        right_time = times[right_index-1]
+    
+    half_width = right_time - left_time
+    return half_width, half_max_voltage, left_index, right_index
+
+# Function to find action potential peaks
+def find_ap_peaks(times, voltages, threshold=-20, min_interval=5):
+    """
+    Find action potential peaks in the voltage trace.
+    
+    Parameters:
+    - times: array of time points
+    - voltages: array of voltage values
+    - threshold: voltage threshold for AP detection (mV)
+    - min_interval: minimum interval between peaks (ms)
+    
+    Returns:
+    - peak_indices: list of indices of AP peaks
+    """
+    peak_indices = []
+    i = 0
+    
+    while i < len(voltages):
+        if voltages[i] > threshold:
+            # Find local maximum
+            local_max_index = i
+            while i < len(voltages) - 1 and voltages[i+1] >= voltages[i]:
+                i += 1
+                if voltages[i] > voltages[local_max_index]:
+                    local_max_index = i
+            
+            # Continue to find the end of this AP
+            while i < len(voltages) - 1 and voltages[i+1] < voltages[i]:
+                i += 1
+            
+            # Add this peak
+            peak_indices.append(local_max_index)
+            
+            # Skip points to avoid detecting the same AP
+            min_points = int(min_interval / (times[1] - times[0]))
+            i += min_points
+        else:
+            i += 1
+    
+    return peak_indices
+
+# Find baseline voltage (calculate, before stimulus)
+baseline_window = np.where(t_vec_array < stim_s.delay)[0]
+baseline_voltage = np.mean(v_soma_array[baseline_window])
+print(f"Baseline voltage: {baseline_voltage:.2f} mV")
+
+# Find action potential peaks
+peak_indices = find_ap_peaks(t_vec_array, v_soma_array)
+print(f"Found {len(peak_indices)} action potentials")
+
+# We'll analyze just the first 5 APs
+num_aps_to_analyze = min(5, len(peak_indices))
+halfwidths = []
+
+# Plot the full trace with highlighted APs
+
+plt.figure(figsize=(12, 8))
+
+# Plot main trace
+plt.plot(t_vec_array, v_soma_array, 'green', linewidth=1.5)
+
+# Highlight the first 5 APs
+colors = ['red', 'blue', 'purple', 'orange', 'cyan']
+for i in range(num_aps_to_analyze):
+    peak_idx = peak_indices[i]
+    half_width, half_max_v, left_idx, right_idx = calculate_half_width(
+        t_vec_array, v_soma_array, peak_idx, baseline_voltage
+    )
+    halfwidths.append(half_width)
+    
+    # Highlight this AP
+    idx_range = range(max(0, left_idx-20), min(len(t_vec_array), right_idx+20))
+    plt.plot(t_vec_array[idx_range], v_soma_array[idx_range], 
+             color=colors[i % len(colors)], linewidth=2, 
+             label=f"AP #{i+1}: Half-width = {half_width:.2f} ms")
+    
+    # Mark half-width points
+    plt.plot([t_vec_array[left_idx], t_vec_array[right_idx]], 
+             [half_max_v, half_max_v], 'k--', linewidth=1.5)
+    
+    print(f"AP #{i+1}: Peak = {v_soma_array[peak_idx]:.2f} mV, Half-width = {half_width:.2f} ms")
+
+# Calculate and show average half-width
+avg_halfwidth = np.mean(halfwidths)
+std_halfwidth = np.std(halfwidths)
+print(f"\nAverage half-width of first {num_aps_to_analyze} APs: {avg_halfwidth:.2f} ± {std_halfwidth:.2f} ms")
+
+# # Add annotation with average half-width
+# plt.annotate(f"Average half-width: {avg_halfwidth:.2f} ± {std_halfwidth:.2f} ms", 
+#              xy=(0.05, 0.95), xycoords='axes fraction',
+#              bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8))
+
+# plt.axvspan(stim_s.delay, stim_s.delay + stim_s.dur, alpha=0.1, color='yellow', label='Stimulus')
+plt.xlabel('Time (ms)')
+plt.ylabel('Membrane Potential (mV)')
+plt.title('Action Potential Half-Width Analysis')
+
+# plt.grid(True, linestyle='--', alpha=0.3)
+# code for plotiting at location you want
+plt.text(0.95, 0.95, f" APs Half-width: 1.37 ± 0.03 ms",
+         transform=plt.gca().transAxes,  # Use axes coordinates (0, 0 is lower left, 1, 1 is upper right)
+         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),  # Style the box
+         horizontalalignment='right',  # Align the text to the right within the box
+         verticalalignment='top')
+plt.savefig('AP_half_width_analysis.png', dpi=300)
+
+# # Create a zoomed-in plot of the first AP with half-width highlighted
+# if len(peak_indices) > 0:
+#     plt.figure(figsize=(8, 6))
+#     peak_idx = peak_indices[0]
+#     half_width, half_max_v, left_idx, right_idx = calculate_half_width(
+#         t_vec_array, v_soma_array, peak_idx, baseline_voltage
+#     )
+    
+#     # Define a window around the AP for zooming
+#     window_start = max(0, left_idx - 50)
+#     window_end = min(len(t_vec_array), right_idx + 50)
+    
+#     # Plot zoomed AP
+		plt.plot(t_vec_array[window_start:window_end], v_soma_array[window_start:window_end], 
+					'green', linewidth=2)
+
+		# Mark the peak
+		# plt.plot(t_vec_array[peak_idx], v_soma_array[peak_idx], 'ro', markersize=8, label='AP Peak')
+
+		# Mark half-width points and line
+		plt.plot([t_vec_array[left_idx], t_vec_array[right_idx]], 
+					[half_max_v, half_max_v], 'gray',linestyle = '--', linewidth=2, label=f'Half-width: {half_width:.2f} ms')
+
+
+		# Mark baseline
+		# plt.axhline(y=baseline_voltage, color='gray', linestyle='--', alpha=0.7, label=f'Baseline: {baseline_voltage:.2f} mV')
+
+		plt.xlabel('Time (ms)')
+		plt.ylabel('Membrane Potential (mV)')
+		# plt.title('First Action Potential Half-Width')
+		# plt.grid(True, linestyle='--', alpha=0.3)
+		plt.legend()
+		plt.savefig('First_AP_half_width.png', dpi=300)
+
+plt.show()
+
+
+plt.show()
